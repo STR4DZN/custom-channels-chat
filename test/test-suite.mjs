@@ -879,6 +879,7 @@ assert(cssContent.includes('#sidebar .tab[data-tab="chat"].active'), "Regra da t
 assert(cssContent.includes("section#chat.sidebar-tab.active"), "Regra section#chat restrita à classe .active");
 assert(cssContent.includes('#sidebar .tab[data-tab="chat"]:not(.active)'), "Regra explícita de display: none para chat inativo na sidebar");
 assert(cssContent.includes('#chat:not(.active):not(#chat-popout):not(.chat-popout)'), "Chat inativo ocultado com display: none !important exceto se for popout");
+assert(cssContent.includes('#sidebar.collapsed #chat'), "Chat ocultado com display: none !important quando sidebar estiver recolhida");
 
 // Simulação de troca de aba na sidebar para 'actors'
 let chatBarReRendered = false;
@@ -931,7 +932,28 @@ assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="damage-card">Ca
 assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="dnd5e-damage">Dano Crítico</div>' }) === true, "HTML com .dnd5e-damage reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="chat-card"><span class="damage">15 de corte</span></div>' }) === true, "HTML com class='damage' reconhecido");
 
-// 24h. Inspeção em nó DOM
+// 24j. Chaves achatadas de atualização (dot-notation)
+assert(ChannelManager.isDiceOrDamage({}, { "flags.dnd5e.damage": true }) === true, "Flags achatadas flags.dnd5e.damage reconhecidas");
+assert(ChannelManager.isDiceOrDamage({}, { "flags.midi-qol.damageRoll": true }) === true, "Flags achatadas flags.midi-qol.damageRoll reconhecidas");
+assert(ChannelManager.isDiceOrDamage({}, { "flags.pf2e.context": { type: "damage-roll" } }) === true, "Flags achatadas flags.pf2e.context reconhecidas");
+assert(ChannelManager.isDiceOrDamage({}, { "flags.tormenta20.rollType": "dano" }) === true, "Flags achatadas flags.tormenta20.rollType reconhecidas");
+
+// 24k. Botões de ação e atributos em D&D 5e (v3/v4) e Tormenta20
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="applyDamage">Aplicar Dano</button>' }) === true, "Botão data-action=applyDamage do D&D 5e reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="damage">Dano</button>' }) === true, "Botão data-action=damage reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="rollDamage">Rolar Dano</button>' }) === true, "Botão data-action=rollDamage reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="aplicar-dano">Aplicar Dano</button>' }) === true, "Botão data-action=aplicar-dano reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-acao="dano">Dano</button>' }) === true, "Botão data-acao=dano do Tormenta20 reconhecido");
+
+// 24l. Flavor, singular roll, Dice So Nice, SWADE, D&D 5e messageType
+assert(ChannelManager.isDiceOrDamage({ flavor: "Damage Roll" }) === true, "Flavor 'Damage Roll' reconhecido");
+assert(ChannelManager.isDiceOrDamage({ flavor: "Rolagem de Dano: 2d6 Fogo" }) === true, "Flavor 'Rolagem de Dano' reconhecido");
+assert(ChannelManager.isDiceOrDamage({ roll: { total: 10 } }) === true, "messageDoc.roll singular reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "dice-so-nice": {} } }) === true, "Flag Dice So Nice (3D dice) reconhecida");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { swade: { roll: {} } } }) === true, "Flag Savage Worlds (swade) reconhecida");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { messageType: "damage" } } }) === true, "D&D 5e messageType=damage reconhecido");
+
+// 24m. Inspeção em nó DOM
 const domRollEl = new MockElement("div");
 domRollEl.className = "chat-message message";
 const innerRoll = new MockElement("div");
@@ -946,12 +968,12 @@ btnDmg.setAttribute("data-damage", "3d6");
 domDamageBtn.appendChild(btnDmg);
 assert(ChannelManager.isDiceOrDamage({}, {}, domDamageBtn) === true, "Elemento DOM contendo [data-damage] reconhecido");
 
-// 24i. Proteção contra falsos positivos (mensagens comuns não devem ir para #dados)
+// 24n. Proteção contra falsos positivos (mensagens comuns não devem ir para #dados)
 assert(ChannelManager.isDiceOrDamage({}, { content: "Tomou 5 pontos de dano da armadilha!" }) === false, "Frase comum contendo a palavra 'dano' NÃO é classificada como rolagem");
 assert(ChannelManager.isDiceOrDamage({}, { content: "That weapon does 1d8 slashing damage on hit." }) === false, "Frase em inglês contendo a palavra 'damage' NÃO é classificada como rolagem");
 assert(ChannelManager.isDiceOrDamage({}, { content: "https://example.com/imagem.png" }) === false, "URL de imagem NÃO é classificada como rolagem");
 
-// TESTE 25: Roteamento Automático de Dano e Rolagens no Ciclo de Vida (preCreate, preUpdate, render)
+// TESTE 25: Roteamento Automático de Dano e Rolagens no Ciclo de Vida (preCreate, preUpdate, render, update)
 console.log("\nTeste 25: Roteamento de Dano e Dados no Ciclo de Vida dos Hooks");
 
 // 25a. preCreateChatMessage com dano/rolagem força canal 'dados' mesmo com outro canal ativo
@@ -1002,6 +1024,43 @@ globalThis.Hooks.callAll("renderChatMessage", damageRenderDoc, damageRenderEl, {
 assert(damageRenderEl.dataset.channel === "dados", "handleChatMessageRender forçou dataset.channel = 'dados' independente de flags anteriores");
 assert(!damageRenderEl.classList.contains("discord-styled-message"), "Classe discord-styled-message removida do card de dano");
 assert(damageRenderEl.querySelector(".discord-avatar-wrap") === null, "Avatar de usuário Discord removido do card de dano");
+
+// 25d. updateChatMessage sincroniza elemento DOM existente em tempo real quando atualizado com dano
+ChannelManager.setActiveChannel("geral");
+const existingCardEl = new MockElement("div");
+existingCardEl.className = "chat-message message discord-styled-message";
+existingCardEl.setAttribute("data-message-id", "msg-card-123");
+existingCardEl.dataset.channel = "geral";
+const avatarInCardEl = new MockElement("div");
+avatarInCardEl.className = "discord-avatar-wrap";
+existingCardEl.appendChild(avatarInCardEl);
+
+const origQuerySelector = globalThis.document.querySelector;
+globalThis.document.querySelector = (sel) => {
+  if (typeof sel === "string" && sel.includes("msg-card-123")) return existingCardEl;
+  return origQuerySelector(sel);
+};
+
+const updateMsgDoc = {
+  id: "msg-card-123",
+  content: "Card de Item Atualizado com Dano",
+  getFlag(mod, key) { return "dados"; }
+};
+const updateChanges2 = {
+  content: '<button data-action="applyDamage">Aplicar Dano</button>',
+  rolls: [{ total: 18 }]
+};
+
+ChannelManager.unreadCounts["dados"] = 0;
+globalThis.Hooks.callAll("updateChatMessage", updateMsgDoc, updateChanges2, {}, "user-1");
+
+assert(existingCardEl.dataset.channel === "dados", "updateChatMessage atualizou dataset.channel para 'dados' no elemento DOM");
+assert(existingCardEl.classList.contains("custom-channel-hidden"), "Mensagem agora de 'dados' oculta enquanto activeChannel for 'geral'");
+assert(!existingCardEl.classList.contains("discord-styled-message"), "Classe discord-styled-message removida do DOM no updateChatMessage");
+assert(existingCardEl.querySelector(".discord-avatar-wrap") === null, "Avatar removido do elemento DOM no updateChatMessage");
+assert(ChannelManager.unreadCounts["dados"] === 1, "Badge de não lidas incrementado para #dados");
+
+globalThis.document.querySelector = origQuerySelector;
 
 
 // ============================================================================

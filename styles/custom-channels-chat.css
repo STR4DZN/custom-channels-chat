@@ -6,9 +6,13 @@
 #chat.active,
 #sidebar .tab[data-tab="chat"].active,
 #sidebar section#chat.active,
+#sidebar:not(.collapsed) #chat.active,
+#sidebar:not(.collapsed) .tab[data-tab="chat"].active,
+#sidebar:not(.collapsed) section#chat.active,
 section#chat.sidebar-tab.active,
 #chat-popout,
-.chat-popout .window-content {
+.chat-popout .window-content,
+.chat-popout #chat {
   display: flex !important;
   flex-direction: column !important;
   height: 100% !important;
@@ -17,10 +21,14 @@ section#chat.sidebar-tab.active,
   contain: paint;
 }
 
-/* Garante que o painel de chat fique estritamente oculto quando outra aba da sidebar estiver selecionada */
+/* Garante que o painel de chat fique estritamente oculto quando outra aba da sidebar estiver selecionada ou minimizada */
 #sidebar .tab[data-tab="chat"]:not(.active),
 #sidebar section#chat:not(.active),
+#sidebar #chat:not(.active),
 section#chat.sidebar-tab:not(.active),
+#sidebar.collapsed #chat,
+#sidebar.collapsed .tab[data-tab="chat"],
+#sidebar.collapsed section#chat,
 #chat:not(.active):not(#chat-popout):not(.chat-popout) {
   display: none !important;
 }

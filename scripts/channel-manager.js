@@ -10,9 +10,60 @@ export class ChannelManager {
   static localChannels = new Set();
 
   /**
+   * Helper estático para extrair flags mescladas tanto em formato aninhado quanto em chaves planas (dot-notation)
+   * @param {object} [doc]
+   * @param {object} [data]
+   * @returns {object}
+   */
+  static extractAllFlags(doc = {}, data = {}) {
+    const merged = {};
+    const ingest = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+
+      // Objeto direto de flags
+      if (obj.flags && typeof obj.flags === "object") {
+        for (const [k, v] of Object.entries(obj.flags)) {
+          merged[k] = typeof v === "object" && v !== null ? { ...(merged[k] || {}), ...v } : v;
+        }
+      }
+
+      // Chaves em notação de ponto (ex: "flags.dnd5e.roll", "flags.midi-qol.workflowId")
+      for (const [key, val] of Object.entries(obj)) {
+        if (key.startsWith("flags.")) {
+          const parts = key.slice(6).split(".");
+          let curr = merged;
+          for (let i = 0; i < parts.length - 1; i++) {
+            curr[parts[i]] = curr[parts[i]] || {};
+            curr = curr[parts[i]];
+          }
+          curr[parts[parts.length - 1]] = val;
+        }
+      }
+
+      // Método getFlag nativo do Foundry Document se disponível
+      if (typeof obj.getFlag === "function") {
+        const knownScopes = [
+          "dnd5e", "pf2e", "midi-qol", "midiqol", "ready-set-roll-5e",
+          "betterrolls5e", "tormenta20", "t20", "dice-so-nice", "swade", "pf1", "cpr", "coc7"
+        ];
+        for (const scope of knownScopes) {
+          const flagVal = obj.getFlag(scope);
+          if (flagVal !== undefined && flagVal !== null) {
+            merged[scope] = typeof flagVal === "object" ? { ...(merged[scope] || {}), ...flagVal } : flagVal;
+          }
+        }
+      }
+    };
+
+    ingest(doc);
+    ingest(data);
+    return merged;
+  }
+
+  /**
    * Detector abrangente para identificar se uma mensagem é uma rolagem de dados ou card de dano.
-   * Suporta sistemas como D&D 5e, PF2e, Tormenta20, módulos de automação (Midi-QOL, Ready Set Roll, Better Rolls)
-   * e inspeção avançada de conteúdo HTML e nós DOM.
+   * Suporta sistemas como D&D 5e (v2/v3/v4), PF2e, Tormenta20, módulos de automação (Midi-QOL, Ready Set Roll, Better Rolls, DSN)
+   * e inspeção avançada de conteúdo HTML, botões de ação e nós DOM.
    * @param {ChatMessage|object} [messageDoc] 
    * @param {object} [data] 
    * @param {HTMLElement} [el] 
@@ -21,6 +72,7 @@ export class ChannelManager {
   static isDiceOrDamage(messageDoc = {}, data = {}, el = null) {
     // 1. Verificação direta de flags ou propriedades booleanas de rolagem
     if (messageDoc?.isRoll || data?.isRoll) return true;
+    if (messageDoc?.roll || data?.roll) return true;
 
     // Rolagens em coleções ou arrays (Foundry v10, v11, v12, v13)
     const msgRolls = messageDoc?.rolls || messageDoc?._rolls;
@@ -39,46 +91,73 @@ export class ChannelManager {
     }
     if (messageDoc?.type === 5 || data?.type === 5 || messageDoc?.style === 5 || data?.style === 5) return true;
 
-    // 2. Flags de sistemas e módulos de automação
-    const docFlags = messageDoc?.flags || {};
-    const dataFlags = data?.flags || {};
-    const flags = { ...docFlags, ...dataFlags };
+    // Inspeção de flavor (muito usado em rolagens de dano por fichas ou macros)
+    const flavor = data?.flavor || messageDoc?.flavor;
+    if (flavor && typeof flavor === "string") {
+      if (/(?:damage|dano)\b/i.test(flavor) || /(?:roll|rolagem)\b/i.test(flavor)) return true;
+    }
+
+    // 2. Flags de sistemas e módulos de automação (com suporte a chaves aninhadas e planas)
+    const flags = this.extractAllFlags(messageDoc, data);
 
     // D&D 5e
     if (flags.dnd5e) {
-      if (flags.dnd5e.roll || flags.dnd5e.damage || flags.dnd5e.damageRoll || flags.dnd5e.rollType === "damage") return true;
-      if (flags.dnd5e.type === "damage" || flags.dnd5e.type === "attack") return true;
+      const d = flags.dnd5e;
+      if (d.roll || d.damage || d.damageRoll || d.rollType === "damage" || d.rollType === "attack") return true;
+      if (d.type === "damage" || d.type === "attack") return true;
+      if (d.messageType === "roll" || d.messageType === "damage") return true;
+      if (d.targets && (d.roll || d.damageRoll || d.rolls)) return true;
     }
 
     // Pathfinder 2e
     if (flags.pf2e) {
-      if (flags.pf2e.context || flags.pf2e.damage || flags.pf2e.target) return true;
+      const p = flags.pf2e;
+      if (p.context || p.damage || p.target || p.strike || p.casting) return true;
     }
 
     // Midi-QOL
-    if (flags["midi-qol"]) return true;
+    if (flags["midi-qol"] || flags.midiqol) return true;
 
     // Ready Set Roll 5e
     if (flags["ready-set-roll-5e"]) return true;
 
     // Better Rolls 5e
-    if (flags["betterrolls5e"]) return true;
+    if (flags.betterrolls5e || flags["betterrolls5e"]) return true;
 
     // Tormenta20 / T20
-    if (flags.tormenta20?.rollType || flags.t20?.rollType || flags.tormenta20?.dano || flags.t20?.dano) return true;
+    const t20 = flags.tormenta20 || flags.t20;
+    if (t20) {
+      if (t20.rollType || t20.dano || t20.dados || t20.ataque || t20.isRoll) return true;
+    }
+
+    // Dice So Nice (3D dice)
+    if (flags["dice-so-nice"] || flags.dsn) return true;
+
+    // Savage Worlds (SWADE)
+    if (flags.swade && (flags.swade.roll || flags.swade.type === "roll")) return true;
+
+    // Tabelas ou rolagens core
+    if (flags.core?.RollTable || flags.core?.roll) return true;
 
     // 3. Inspeção de conteúdo HTML por padrões de rolagem ou dano
     const content = data?.content || messageDoc?.content;
     if (content && typeof content === "string") {
-      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|inline-roll|damage-roll|damage-card|data-damage|dnd5e-damage|data-roll|chat-damage-buttons|apply-damage|damage-apply|card-damage|target-damage|inline-dsn-hidden|data-dano|rolagem-dano|class=["'][^"']*\b(?:damage|dano)\b/i;
+      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|dice-tooltip|inline-roll|damage-roll|damage-card|damage-total|dnd5e-damage|dnd5e-roll|card-damage|target-damage|damage-application|damage-apply|chat-damage-buttons|rolagem-dano|dano-total|card-dano|aplicar-dano|data-damage|data-roll|data-dano|data-action=["'](?:damage|applyDamage|apply-damage|rollDamage|roll-damage|aplicar-dano)["']|data-acao=["'](?:dano|aplicar-dano|rolar-dano)["']|data-roll-type=["']damage["']|inline-dsn-hidden|class=["'][^"']*\b(?:damage|dano)\b/i;
       if (DAMAGE_DICE_REGEX.test(content)) return true;
     }
 
     // 4. Inspeção no elemento DOM renderizado (se fornecido)
     if (el) {
-      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano")) return true;
+      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano") || el.classList?.contains?.("damage-card")) return true;
       if (typeof el.querySelector === "function") {
-        const rollEl = el.querySelector(".dice-roll, .dice-result, .dice-total, .dice-formula, .inline-roll, [data-damage], [data-roll], .damage-roll, .damage-card, .damage, .dnd5e-damage, .chat-damage-buttons, .apply-damage, [data-dano]");
+        const rollEl = el.querySelector(
+          ".dice-roll, .dice-result, .dice-total, .dice-formula, .inline-roll, " +
+          "[data-damage], [data-roll], [data-dano], [data-damage-type], [data-tipo-dano], " +
+          ".damage-roll, .damage-card, .damage-total, .dano-total, .damage, .dnd5e-damage, " +
+          ".chat-damage-buttons, .apply-damage, .aplicar-dano, " +
+          '[data-action="applyDamage"], [data-action="damage"], [data-action="apply-damage"], [data-action="rollDamage"], [data-action="aplicar-dano"], ' +
+          '[data-acao="dano"], [data-acao="aplicar-dano"], [data-roll-type="damage"]'
+        );
         if (rollEl !== null) return true;
       }
     }
@@ -492,12 +571,14 @@ export class ChannelManager {
     messages.forEach(msgEl => {
       const messageId = msgEl.dataset?.messageId || msgEl.getAttribute?.("data-message-id");
       const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-      const isDiceOrDamage = this.isDiceOrDamage(msgDoc, {}, msgEl);
+      const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, msgEl);
 
       if (autoRoute && isDiceOrDamage) {
         msgEl.dataset.channel = "dados";
       } else if (!msgEl.dataset?.channel) {
-        const channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral");
+        const channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+          || msgDoc?.flags?.[this.MODULE_ID]?.channel
+          || (isDiceOrDamage ? "dados" : "geral");
         msgEl.dataset.channel = channel;
       }
     });
@@ -621,12 +702,14 @@ export class ChannelManager {
         if (!el.dataset) continue;
         const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
         const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-        const isDiceOrDamage = this.isDiceOrDamage(msgDoc, {}, el);
+        const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
 
         if (autoRoute && isDiceOrDamage) {
           el.dataset.channel = "dados";
         } else if (!el.dataset.channel) {
-          el.dataset.channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral");
+          el.dataset.channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+            || msgDoc?.flags?.[this.MODULE_ID]?.channel
+            || (isDiceOrDamage ? "dados" : "geral");
         }
         const channel = el.dataset.channel || "geral";
         el.classList.toggle("custom-channel-hidden", channel !== active);
