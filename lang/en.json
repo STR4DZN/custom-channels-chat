@@ -1,0 +1,11 @@
+{
+  "CUSTOM_CHANNELS_CHAT.Settings.ChannelsList.Name": "Chat Channels",
+  "CUSTOM_CHANNELS_CHAT.Settings.ChannelsList.Hint": "Comma-separated list of channel names. The 'dados' (rolls) channel is automatically reserved for dice.",
+  "CUSTOM_CHANNELS_CHAT.Settings.AutoRouteRolls.Name": "Auto-Route Dice Rolls",
+  "CUSTOM_CHANNELS_CHAT.Settings.AutoRouteRolls.Hint": "Automatically route all dice rolls to the dedicated #dados tab.",
+  "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Name": "Discord Visual Style",
+  "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Hint": "Applies user avatar and clean layout to conversation messages.",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadingImage": "Uploading image to chat...",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadSuccess": "Image sent successfully!",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadError": "Failed to process selected image."
+}

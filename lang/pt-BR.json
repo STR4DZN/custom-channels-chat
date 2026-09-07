@@ -1,0 +1,11 @@
+{
+  "CUSTOM_CHANNELS_CHAT.Settings.ChannelsList.Name": "Canais do Chat",
+  "CUSTOM_CHANNELS_CHAT.Settings.ChannelsList.Hint": "Lista de canais separados por vírgula. O canal 'dados' é reservado automaticamente para rolagens.",
+  "CUSTOM_CHANNELS_CHAT.Settings.AutoRouteRolls.Name": "Roteamento Automático de Rolagens",
+  "CUSTOM_CHANNELS_CHAT.Settings.AutoRouteRolls.Hint": "Envia automaticamente todas as rolagens de dados para a aba #dados.",
+  "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Name": "Estilo Visual Discord",
+  "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Hint": "Aplica avatar do usuário e layout limpo nas mensagens de conversa.",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadingImage": "Enviando imagem para o chat...",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadSuccess": "Imagem enviada com sucesso!",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadError": "Não foi possível processar a imagem selecionada."
+}

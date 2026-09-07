@@ -1,0 +1,161 @@
+/* ==========================================================================
+   Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13
+   ========================================================================== */
+
+/* Barra de Canais no Topo do Chat */
+.custom-channels-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  background: rgba(18, 19, 22, 0.85);
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  margin-bottom: 4px;
+  z-index: 10;
+}
+
+/* Botões / Abas de Canal */
+.custom-channel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  line-height: 1;
+}
+
+.custom-channel-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #dbdee1;
+}
+
+/* Canal Ativo */
+.custom-channel-tab.active {
+  background: #5865f2 !important; /* Discord Blurple */
+  color: #ffffff !important;
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(88, 101, 242, 0.4);
+}
+
+.custom-channel-tab .channel-hash {
+  color: #80848e;
+  font-weight: 700;
+}
+
+.custom-channel-tab.active .channel-hash {
+  color: #ffffff;
+}
+
+/* Badge de Mensagens Não Lidas */
+.channel-unread-badge {
+  background: #f23f43; /* Discord Red */
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 5px;
+  margin-left: 2px;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Botão de Anexo de Arquivo / Imagem */
+.custom-chat-attach-btn {
+  background: transparent;
+  border: none;
+  color: #949ba4;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.custom-chat-attach-btn:hover {
+  color: #5865f2;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Estilo de Imagens Enviadas */
+.discord-image-container {
+  margin-top: 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 100%;
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.discord-chat-img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 6px;
+  cursor: zoom-in;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.discord-chat-img:hover {
+  opacity: 0.95;
+  transform: scale(1.01);
+}
+
+/* Customização dos Cards de Mensagem de Conversa */
+.message.discord-styled-message {
+  background: rgba(26, 27, 30, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-left: 3px solid #5865f2 !important;
+  border-radius: 6px !important;
+  margin: 6px 0 !important;
+  padding: 8px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Avatar do Usuário */
+.discord-avatar-wrap {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-right: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.discord-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Ajustes no cabeçalho da mensagem */
+.discord-styled-message .message-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.discord-styled-message .message-sender {
+  font-weight: 600;
+  color: #f2f3f5;
+  font-size: 12px;
+}
+
+.discord-styled-message .message-metadata {
+  color: #949ba4;
+  font-size: 10px;
+  margin-left: auto;
+}
