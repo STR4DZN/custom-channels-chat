@@ -94,28 +94,22 @@ export class ChannelManager {
     // Inspeção de flavor (muito usado em rolagens de dano por fichas ou macros)
     const flavor = data?.flavor || messageDoc?.flavor;
     if (flavor && typeof flavor === "string") {
-      if (/(?:damage|dano)\b/i.test(flavor) || /(?:roll|rolagem)\b/i.test(flavor)) return true;
+      if (/(?:damage|dano|roll|rolagem|attack|ataque|check|teste|save|salvaguarda|resistencia|resistência|cura|heal|healing|critical|critico|crítico|hit|acerto|erro|miss)\b/i.test(flavor)) return true;
     }
 
-    // 2. Flags de sistemas e módulos de automação (com suporte a chaves aninhadas e planas)
+    // 2. Flags de sistemas e módulos de automação (qualquer atividade mecânica de ficha/item/dano)
     const flags = this.extractAllFlags(messageDoc, data);
 
-    // D&D 5e
+    // D&D 5e: qualquer card de item, atividade, ataque, dano, uso de magia, etc.
     if (flags.dnd5e) {
       const d = flags.dnd5e;
-      if (d.roll || d.damage || d.damageRoll || d.rollType === "damage" || d.rollType === "attack") return true;
-      if (d.type === "damage" || d.type === "attack") return true;
-      if (d.messageType === "roll" || d.messageType === "damage") return true;
-      if (d.targets && (d.roll || d.damageRoll || d.rolls)) return true;
+      if (d.roll || d.damage || d.damageRoll || d.rollType || d.type || d.messageType || d.targets || d.item || d.activity || d.use) return true;
     }
 
-    // Pathfinder 2e
-    if (flags.pf2e) {
-      const p = flags.pf2e;
-      if (p.context || p.damage || p.target || p.strike || p.casting) return true;
-    }
+    // Pathfinder 2e: qualquer contexto, dano, strike, magia
+    if (flags.pf2e) return true;
 
-    // Midi-QOL
+    // Midi-QOL: automações completas de ataque e dano
     if (flags["midi-qol"] || flags.midiqol) return true;
 
     // Ready Set Roll 5e
@@ -124,39 +118,39 @@ export class ChannelManager {
     // Better Rolls 5e
     if (flags.betterrolls5e || flags["betterrolls5e"]) return true;
 
-    // Tormenta20 / T20
-    const t20 = flags.tormenta20 || flags.t20;
-    if (t20) {
-      if (t20.rollType || t20.dano || t20.dados || t20.ataque || t20.isRoll) return true;
-    }
+    // Tormenta20 / T20 / Ordem Paranormal
+    if (flags.tormenta20 || flags.t20 || flags.ordemparanormal || flags.op) return true;
 
     // Dice So Nice (3D dice)
     if (flags["dice-so-nice"] || flags.dsn) return true;
 
     // Savage Worlds (SWADE)
-    if (flags.swade && (flags.swade.roll || flags.swade.type === "roll")) return true;
+    if (flags.swade) return true;
+
+    // Call of Cthulhu / CoC / Cyberpunk / Cypher
+    if (flags.coc7 || flags["cyberpunk-red-core"] || flags.cyphersystem) return true;
 
     // Tabelas ou rolagens core
     if (flags.core?.RollTable || flags.core?.roll) return true;
 
-    // 3. Inspeção de conteúdo HTML por padrões de rolagem ou dano
+    // 3. Inspeção de conteúdo HTML por padrões de rolagem, cards de itens ou dano
     const content = data?.content || messageDoc?.content;
     if (content && typeof content === "string") {
-      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|dice-tooltip|inline-roll|damage-roll|damage-card|damage-total|dnd5e-damage|dnd5e-roll|card-damage|target-damage|damage-application|damage-apply|chat-damage-buttons|rolagem-dano|dano-total|card-dano|aplicar-dano|data-damage|data-roll|data-dano|data-action=["'](?:damage|applyDamage|apply-damage|rollDamage|roll-damage|aplicar-dano)["']|data-acao=["'](?:dano|aplicar-dano|rolar-dano)["']|data-roll-type=["']damage["']|inline-dsn-hidden|class=["'][^"']*\b(?:damage|dano)\b/i;
+      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|dice-tooltip|inline-roll|damage-roll|damage-card|damage-total|dnd5e-damage|dnd5e-roll|card-damage|target-damage|damage-application|damage-apply|chat-damage-buttons|rolagem-dano|dano-total|card-dano|aplicar-dano|data-damage|data-roll|data-dano|data-formula|chat-card|item-card|data-item-id|data-action=["'](?:damage|applyDamage|apply-damage|rollDamage|roll-damage|aplicar-dano|attack|rollAttack|save|activityUse|use|heal|applyHeal|apply-heal|strike-damage|strike-critical)["']|data-acao=["'](?:dano|aplicar-dano|rolar-dano|ataque|rolar-ataque|teste|cura)["']|data-roll-type=["'](?:damage|attack|heal)["']|inline-dsn-hidden|class=["'][^"']*\b(?:damage|dano|dice-roll|item-card|chat-card)\b|\[\[/i;
       if (DAMAGE_DICE_REGEX.test(content)) return true;
     }
 
     // 4. Inspeção no elemento DOM renderizado (se fornecido)
     if (el) {
-      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano") || el.classList?.contains?.("damage-card")) return true;
+      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano") || el.classList?.contains?.("damage-card") || el.classList?.contains?.("chat-card") || el.classList?.contains?.("item-card")) return true;
       if (typeof el.querySelector === "function") {
         const rollEl = el.querySelector(
           ".dice-roll, .dice-result, .dice-total, .dice-formula, .inline-roll, " +
-          "[data-damage], [data-roll], [data-dano], [data-damage-type], [data-tipo-dano], " +
-          ".damage-roll, .damage-card, .damage-total, .dano-total, .damage, .dnd5e-damage, " +
+          "[data-damage], [data-roll], [data-dano], [data-formula], [data-damage-type], [data-tipo-dano], " +
+          ".damage-roll, .damage-card, .damage-total, .dano-total, .damage, .dnd5e-damage, .chat-card, .item-card, " +
           ".chat-damage-buttons, .apply-damage, .aplicar-dano, " +
-          '[data-action="applyDamage"], [data-action="damage"], [data-action="apply-damage"], [data-action="rollDamage"], [data-action="aplicar-dano"], ' +
-          '[data-acao="dano"], [data-acao="aplicar-dano"], [data-roll-type="damage"]'
+          '[data-action="applyDamage"], [data-action="damage"], [data-action="apply-damage"], [data-action="rollDamage"], [data-action="aplicar-dano"], [data-action="attack"], [data-action="activityUse"], [data-action="use"], [data-action="heal"], [data-action="applyHeal"], [data-action="strike-damage"], ' +
+          '[data-acao="dano"], [data-acao="aplicar-dano"], [data-acao="rolar-dano"], [data-acao="ataque"], [data-acao="rolar-ataque"], [data-acao="teste"], [data-acao="cura"], [data-roll-type="damage"], [data-item-id]'
         );
         if (rollEl !== null) return true;
       }

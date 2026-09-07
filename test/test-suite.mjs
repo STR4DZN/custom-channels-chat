@@ -31,13 +31,31 @@ class MockClassList {
   }
 }
 
+class MockStyle {
+  constructor(el) {
+    this.el = el;
+    this._props = {};
+  }
+  setProperty(prop, val) {
+    this._props[prop] = String(val);
+    this[prop] = String(val);
+  }
+  removeProperty(prop) {
+    delete this._props[prop];
+    delete this[prop];
+  }
+  getPropertyValue(prop) {
+    return this._props[prop] || "";
+  }
+}
+
 class MockElement {
   constructor(tagName = "div") {
     this.tagName = tagName.toUpperCase();
     this.children = [];
     this.dataset = {};
     this.classList = new MockClassList(this);
-    this.style = {};
+    this.style = new MockStyle(this);
     this.attributes = {};
     this._innerHTML = "";
     this.textContent = "";
@@ -102,6 +120,8 @@ class MockElement {
 
   setAttribute(name, val) { this.attributes[name] = String(val); }
   getAttribute(name) { return this.attributes[name]; }
+  hasAttribute(name) { return this.attributes[name] !== undefined; }
+  removeAttribute(name) { delete this.attributes[name]; }
   appendChild(child) {
     if (child instanceof MockElement) {
       child.parentElement = this;
@@ -224,8 +244,16 @@ class MockElement {
 globalThis.HTMLElement = MockElement;
 
 const mockHead = new MockElement("head");
+const mockSidebar = new MockElement("div");
+mockSidebar.id = "sidebar";
+
+const mockSidebarTabs = new MockElement("nav");
+mockSidebarTabs.id = "sidebar-tabs";
+mockSidebar.appendChild(mockSidebarTabs);
+
 const mockChat = new MockElement("section");
 mockChat.id = "chat";
+mockSidebar.appendChild(mockChat);
 
 const mockChatLog = new MockElement("ol");
 mockChatLog.id = "chat-log";
@@ -254,6 +282,8 @@ globalThis.document = {
     if (id === "chat-log") return mockChatLog;
     if (id === "chat-controls") return mockChatControls;
     if (id === "chat-message") return mockChatTextarea;
+    if (id === "sidebar") return mockSidebar;
+    if (id === "sidebar-tabs") return mockSidebarTabs;
     const findInNode = (node) => {
       if (node.id === id) return node;
       for (const c of node.children) {
@@ -890,6 +920,24 @@ globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
 assert(chatBarReRendered === false, "changeSidebarTab com tabName='actors' NÃO processa aba de chat");
 ChannelManager.renderBar = origRenderBar;
 
+// Verificação de isolamento via syncChatVisibility (esconde #chat com display: none e hidden)
+globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
+assert(mockChat.style.display === "none", "changeSidebarTab para 'actors' aplicou display: none inline no #chat");
+assert(mockChat.hasAttribute("hidden") === true, "changeSidebarTab para 'actors' aplicou atributo hidden no #chat");
+assert(!mockChat.classList.contains("active"), "changeSidebarTab para 'actors' removeu classe .active do #chat");
+
+globalThis.Hooks.callAll("changeSidebarTab", { tabName: "chat" });
+assert(mockChat.style.display !== "none", "changeSidebarTab para 'chat' removeu display: none inline do #chat");
+assert(mockChat.hasAttribute("hidden") === false, "changeSidebarTab para 'chat' removeu atributo hidden do #chat");
+assert(mockChat.classList.contains("active"), "changeSidebarTab para 'chat' adicionou classe .active ao #chat");
+
+mockSidebar.classList.add("collapsed");
+globalThis.Hooks.callAll("collapseSidebar", mockSidebar, true);
+assert(mockChat.style.display === "none", "collapseSidebar(true) aplicou display: none inline no #chat");
+mockSidebar.classList.remove("collapsed");
+globalThis.Hooks.callAll("collapseSidebar", mockSidebar, false);
+assert(mockChat.style.display !== "none", "collapseSidebar(false) restaurou visualização do #chat quando ativo");
+
 // TESTE 24: Detecção Robusta de Rolagens e Dano Multi-Sistemas (ChannelManager.isDiceOrDamage)
 console.log("\nTeste 24: Detector Multi-Sistemas de Rolagens e Dano (D&D 5e, PF2e, Tormenta20, Midi-QOL, etc.)");
 
@@ -906,6 +954,8 @@ assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { damage: true } } })
 assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { damageRoll: { formula: "2d6" } } } }) === true, "D&D 5e flags.dnd5e.damageRoll reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { rollType: "damage" } } }) === true, "D&D 5e flags.dnd5e.rollType='damage' reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { type: "damage" } } }) === true, "D&D 5e flags.dnd5e.type='damage' reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { activity: { type: "attack" } } } }) === true, "D&D 5e v4 activity card reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { use: true } } }) === true, "D&D 5e card de uso de item reconhecido");
 
 // 24c. Pathfinder 2e (pf2e)
 assert(ChannelManager.isDiceOrDamage({}, { flags: { pf2e: { context: { type: "damage-roll" } } } }) === true, "PF2e damage-roll no context reconhecido");
@@ -938,16 +988,23 @@ assert(ChannelManager.isDiceOrDamage({}, { "flags.midi-qol.damageRoll": true }) 
 assert(ChannelManager.isDiceOrDamage({}, { "flags.pf2e.context": { type: "damage-roll" } }) === true, "Flags achatadas flags.pf2e.context reconhecidas");
 assert(ChannelManager.isDiceOrDamage({}, { "flags.tormenta20.rollType": "dano" }) === true, "Flags achatadas flags.tormenta20.rollType reconhecidas");
 
-// 24k. Botões de ação e atributos em D&D 5e (v3/v4) e Tormenta20
+// 24k. Botões de ação e atributos em D&D 5e (v3/v4), PF2e, Tormenta20 e Ordem Paranormal
 assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="applyDamage">Aplicar Dano</button>' }) === true, "Botão data-action=applyDamage do D&D 5e reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="damage">Dano</button>' }) === true, "Botão data-action=damage reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="rollDamage">Rolar Dano</button>' }) === true, "Botão data-action=rollDamage reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="aplicar-dano">Aplicar Dano</button>' }) === true, "Botão data-action=aplicar-dano reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="activityUse">Usar Atividade</button>' }) === true, "Botão data-action=activityUse reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="applyHeal">Aplicar Cura</button>' }) === true, "Botão data-action=applyHeal reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-action="strike-damage">Dano de Golpe PF2e</button>' }) === true, "Botão data-action=strike-damage reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-acao="dano">Dano</button>' }) === true, "Botão data-acao=dano do Tormenta20 reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-acao="rolar-dano">Rolar Dano</button>' }) === true, "Botão data-acao=rolar-dano reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { ordemparanormal: { dano: true } } }) === true, "Flag Ordem Paranormal reconhecida");
 
 // 24l. Flavor, singular roll, Dice So Nice, SWADE, D&D 5e messageType
 assert(ChannelManager.isDiceOrDamage({ flavor: "Damage Roll" }) === true, "Flavor 'Damage Roll' reconhecido");
 assert(ChannelManager.isDiceOrDamage({ flavor: "Rolagem de Dano: 2d6 Fogo" }) === true, "Flavor 'Rolagem de Dano' reconhecido");
+assert(ChannelManager.isDiceOrDamage({ flavor: "Cura: 2d8+3 PV" }) === true, "Flavor 'Cura' reconhecido");
+assert(ChannelManager.isDiceOrDamage({ flavor: "Acerto Crítico!" }) === true, "Flavor 'Crítico' reconhecido");
 assert(ChannelManager.isDiceOrDamage({ roll: { total: 10 } }) === true, "messageDoc.roll singular reconhecido");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { "dice-so-nice": {} } }) === true, "Flag Dice So Nice (3D dice) reconhecida");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { swade: { roll: {} } } }) === true, "Flag Savage Worlds (swade) reconhecida");

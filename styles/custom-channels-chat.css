@@ -2,14 +2,13 @@
    Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13 e v12
    ========================================================================== */
 
-/* Container do Chat (Garante layout fixo flexível e previne rolagem indevida do painel pai apenas quando ativo) */
-#chat.active,
+/* Container do Chat (Garante layout fixo flexível apenas quando ativo e sem atributo hidden) */
+#sidebar:not(.collapsed) #chat.active:not([hidden]),
+#sidebar:not(.collapsed) .tab[data-tab="chat"].active:not([hidden]),
 #sidebar .tab[data-tab="chat"].active,
-#sidebar section#chat.active,
-#sidebar:not(.collapsed) #chat.active,
-#sidebar:not(.collapsed) .tab[data-tab="chat"].active,
-#sidebar:not(.collapsed) section#chat.active,
-section#chat.sidebar-tab.active,
+#sidebar:not(.collapsed) section#chat.active:not([hidden]),
+section#chat.sidebar-tab.active:not([hidden]),
+#chat.active:not([hidden]),
 #chat-popout,
 .chat-popout .window-content,
 .chat-popout #chat {
@@ -21,15 +20,25 @@ section#chat.sidebar-tab.active,
   contain: paint;
 }
 
-/* Garante que o painel de chat fique estritamente oculto quando outra aba da sidebar estiver selecionada ou minimizada */
+/* Garante com especificidade máxima que o chat fique estritamente oculto quando outra aba da sidebar estiver selecionada ou minimizada */
+#sidebar #chat:not(.active),
 #sidebar .tab[data-tab="chat"]:not(.active),
 #sidebar section#chat:not(.active),
-#sidebar #chat:not(.active),
+#sidebar .sidebar-tab[data-tab="chat"]:not(.active),
 section#chat.sidebar-tab:not(.active),
+#chat:not(.active):not(#chat-popout):not(.chat-popout),
 #sidebar.collapsed #chat,
 #sidebar.collapsed .tab[data-tab="chat"],
 #sidebar.collapsed section#chat,
-#chat:not(.active):not(#chat-popout):not(.chat-popout) {
+#sidebar [data-tab="chat"][hidden],
+#sidebar section#chat[hidden],
+#chat[hidden]:not(#chat-popout),
+#sidebar:has(#sidebar-tabs [data-tab]:not([data-tab="chat"]).active) #chat,
+#sidebar:has(#sidebar-tabs [data-tab]:not([data-tab="chat"]).active) [data-tab="chat"],
+#sidebar:has(#sidebar-tabs .item:not([data-tab="chat"]).active) #chat,
+#sidebar:has(#sidebar-tabs .tab:not([data-tab="chat"]).active) #chat,
+#sidebar:has(#sidebar-tabs [data-tab="chat"]:not(.active)) #chat,
+#sidebar:has(#sidebar-tabs [data-tab="chat"]:not(.active)) [data-tab="chat"] {
   display: none !important;
 }
 
