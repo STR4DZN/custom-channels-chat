@@ -29,24 +29,19 @@ Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiên
 
 ## 📦 Como Instalar e Testar no Foundry VTT
 
-1. Abra a pasta de dados do seu Foundry VTT:
-   - No Windows, o caminho padrão geralmente é:
-     `%localappdata%\FoundryVTT\Data\modules\`
-2. Copie a pasta `custom-channels-chat` para dentro do diretório `modules/`:
+### Método 1: Instalação Direta pelo Manifest URL (Recomendado)
+1. Abra o Foundry VTT na tela inicial de **Setup** (Gerenciador de Mundos/Sistemas).
+2. Vá na aba **Add-on Modules** (Módulos Adicionais) e clique em **Install Module** (Instalar Módulo).
+3. No campo **Manifest URL** no rodapé da janela, cole o link:
+   ```text
+   https://github.com/STR4DZN/custom-channels-chat/releases/latest/download/module.json
    ```
-   FoundryVTT/
-   └── Data/
-       └── modules/
-           └── custom-channels-chat/
-               ├── module.json
-               ├── scripts/
-               ├── styles/
-               └── ...
-   ```
-3. Inicie o Foundry VTT e abra o seu Mundo de jogo.
-4. Vá na aba de **Configurações do Jogo** (`Game Settings`) > **Gerenciar Módulos** (`Manage Modules`).
-5. Procure por **Custom Channels Chat** e marque a caixa para ativá-lo.
-6. Salve as alterações do módulo e o chat será atualizado com a barra de canais!
+4. Clique em **Install** e o Foundry baixará e instalará o módulo automaticamente!
+
+### Método 2: Instalação Manual (Pasta Local)
+1. Copie a pasta `custom-channels-chat` para o diretório de dados do Foundry:
+   - No Windows: `%localappdata%\FoundryVTT\Data\modules\custom-channels-chat` (ou o seu diretório de dados configurado).
+2. Inicie o mundo e ative o módulo em **Gerenciar Módulos**.
 
 ---
 
