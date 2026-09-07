@@ -43,6 +43,11 @@ class MockElement {
     this.id = "";
     this.listeners = {};
     this.scrollLeft = 0;
+    this.scrollTop = 0;
+    this.scrollWidth = 500;
+    this.clientWidth = 300;
+    this.offsetLeft = 0;
+    this.offsetWidth = 80;
   }
 
   set className(val) {
@@ -85,6 +90,13 @@ class MockElement {
 
   scrollIntoView() {
     this.scrolledIntoView = true;
+  }
+
+  scrollTo(options) {
+    if (typeof options === "object") {
+      if (options.left !== undefined) this.scrollLeft = options.left;
+      if (options.top !== undefined) this.scrollTop = options.top;
+    }
   }
 
   setAttribute(name, val) { this.attributes[name] = String(val); }
@@ -259,17 +271,54 @@ globalThis.document = {
     const inBody = document.body.querySelectorAll(sel);
     return [...inChat, ...inBody];
   },
-  addEventListener(event, cb) {
+  addEventListener(event, cb, useCapture) {
     if (!documentListeners[event]) documentListeners[event] = [];
-    documentListeners[event].push(cb);
+    if (useCapture) {
+      documentListeners[event].unshift(cb);
+    } else {
+      documentListeners[event].push(cb);
+    }
   },
   removeEventListener(event, cb) {
     if (!documentListeners[event]) return;
     documentListeners[event] = documentListeners[event].filter(h => h !== cb);
   },
   dispatchEvent(event) {
-    const handlers = documentListeners[event.type] || [];
+    const handlers = (documentListeners[event.type] || []).slice();
     for (const h of handlers) h(event);
+  }
+};
+
+let lastWindowOpened = null;
+globalThis.window = {
+  innerWidth: 1920,
+  innerHeight: 1080,
+  open(url) {
+    lastWindowOpened = {
+      url,
+      document: {
+        written: "",
+        write(html) { this.written += html; },
+        close() {}
+      }
+    };
+    return lastWindowOpened;
+  }
+};
+
+const registeredHooks = {};
+globalThis.Hooks = {
+  on(event, cb) {
+    if (!registeredHooks[event]) registeredHooks[event] = [];
+    registeredHooks[event].push(cb);
+  },
+  once(event, cb) {
+    if (!registeredHooks[event]) registeredHooks[event] = [];
+    registeredHooks[event].push(cb);
+  },
+  callAll(event, ...args) {
+    const list = (registeredHooks[event] || []).slice();
+    for (const h of list) h(...args);
   }
 };
 
@@ -352,6 +401,9 @@ globalThis.ChatMessage = {
     return data;
   }
 };
+
+// Carrega os hooks e inicializadores do main.js
+await import("../scripts/main.js");
 
 // ============================================================================
 // 2. SUITE DE TESTES
@@ -721,6 +773,100 @@ console.log("\nTeste 18: Isolamento de Rolagem e Inserção Fora do ChatLog");
 const chatLogEl = mockChat.querySelector("#chat-log");
 assert(!chatLogEl.children.some(c => c.matches?.(".custom-channels-bar")), "Barra de canais NÃO está contida dentro do #chat-log");
 assert(mockChat.children[0] === stickyBar || mockChat.children.indexOf(stickyBar) < mockChat.children.indexOf(chatLogEl), "Barra de canais está posicionada firmemente ANTES do #chat-log");
+
+// TESTE 19: Fechamento ao clicar fora da imagem e navegação de Data URL
+console.log("\nTeste 19: Fechamento do Lightbox no Overlay e Abertura Segura de Data URL");
+const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const dataLightbox = ImageHandler.openLightbox(dataUrl, "Data Image");
+assert(dataLightbox !== null, "Lightbox instanciado com Data URL");
+assert(document.body.classList.contains("custom-lightbox-open"), "Classe .custom-lightbox-open adicionada ao body para travar rolagem");
+
+const dataOpenBtn = dataLightbox.querySelector(".custom-lightbox-open-ext");
+assert(dataOpenBtn !== null, "Botão de abrir presente");
+dataOpenBtn.dispatchEvent({ type: "click", preventDefault() {}, stopPropagation() {} });
+assert(lastWindowOpened !== null, "window.open chamado com segurança para Data URL sem bloqueio de navegação do browser");
+assert(lastWindowOpened.document.written.includes(dataUrl), "Imagem gravada no documento da nova janela aberta");
+
+// Clicar fora da imagem (no overlay ou backdrop) deve fechar
+dataLightbox.dispatchEvent({ type: "click", target: dataLightbox, preventDefault() {}, stopPropagation() {} });
+assert(!dataLightbox.classList.contains("active"), "Clique no overlay fecha o Lightbox");
+
+// TESTE 20: Captura de clique em imagens genéricas do chat e proteção de avatares/dados
+console.log("\nTeste 20: Interceptação em Fase de Captura de Imagens de Chat e Proteção de Avatares");
+let capturedSrc = "";
+const prevOpenLightbox = ImageHandler.openLightbox;
+ImageHandler.openLightbox = (src) => { capturedSrc = src; return null; };
+
+// 1. Imagem comum sem classe dentro do chat log
+const plainChatImg = new MockElement("img");
+plainChatImg.src = "https://example.com/mapa-secreto.jpg";
+mockChatLog.appendChild(plainChatImg);
+
+document.dispatchEvent({
+  type: "click",
+  target: plainChatImg,
+  preventDefault() {},
+  stopPropagation() {}
+});
+assert(capturedSrc === "https://example.com/mapa-secreto.jpg", "Imagem comum dentro do #chat-log interceptada e aberta no Lightbox");
+
+// 2. Avatar de autor não deve ser aberto no Lightbox
+capturedSrc = "";
+const avatarImg = new MockElement("img");
+avatarImg.className = "avatar";
+avatarImg.src = "icons/mestre.png";
+const avatarWrap = new MockElement("div");
+avatarWrap.className = "discord-avatar-wrap";
+avatarWrap.appendChild(avatarImg);
+mockChatLog.appendChild(avatarWrap);
+
+document.dispatchEvent({
+  type: "click",
+  target: avatarImg,
+  preventDefault() {},
+  stopPropagation() {}
+});
+assert(capturedSrc === "", "Avatar do autor ignorado pelo interceptador de Lightbox");
+
+ImageHandler.openLightbox = prevOpenLightbox;
+
+// TESTE 21: Isolamento de Rolagem (scrollToTab) e Bloqueio de Scroll no container #chat
+console.log("\nTeste 21: Isolamento de Rolagem (scrollToTab) e Bloqueio de Scroll no container pai");
+const mockNav = new MockElement("nav");
+mockNav.className = "custom-channels-bar";
+mockNav.scrollWidth = 600;
+mockNav.clientWidth = 200;
+mockNav.scrollLeft = 0;
+
+const mockTabA = new MockElement("button");
+mockTabA.offsetLeft = 250;
+mockTabA.offsetWidth = 80;
+mockNav.appendChild(mockTabA);
+
+ChannelManager.scrollToTab(mockNav, mockTabA);
+assert(mockNav.scrollLeft > 0, "scrollToTab ajusta o scrollLeft do container nav para exibir a aba");
+assert(mockTabA.scrolledIntoView !== true, "scrollToTab NÃO dispara scrollIntoView nativo que desalinharia os containers pais");
+
+// Teste de bloqueio de scroll indevido no chatContainer
+mockChat.scrollTop = 50;
+mockChat.dispatchEvent({ type: "scroll" });
+assert(mockChat.scrollTop === 0, "Listener de scroll lock reseta qualquer tentativa do browser de rolar o container #chat no foco");
+
+// TESTE 22: Proteção e centralização de ImagePopout nativo (Hook renderImagePopout)
+console.log("\nTeste 22: Hook renderImagePopout centraliza e restringe popout ao viewport");
+let popoutPosition = null;
+const fakePopoutApp = {
+  position: { width: 2500, height: 1600, top: 100, left: 100 },
+  setPosition(pos) { popoutPosition = pos; }
+};
+const fakePopoutHtml = new MockElement("div");
+fakePopoutHtml.className = "image-popout";
+
+globalThis.Hooks.callAll("renderImagePopout", fakePopoutApp, fakePopoutHtml, {});
+assert(popoutPosition !== null, "Hook renderImagePopout executado com sucesso");
+assert(popoutPosition.width <= 1920 * 0.9, "Largura do popout restrita a no máximo 90vw");
+assert(popoutPosition.height <= 1080 * 0.9, "Altura do popout restrita a no máximo 90vh");
+assert(popoutPosition.left >= 10, "Popout mantido centralizado e visível na tela");
 
 
 // ============================================================================

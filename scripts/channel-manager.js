@@ -209,12 +209,13 @@ export class ChannelManager {
     const root = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : document.getElementById("chat"));
     if (!root) return;
 
-    // Remove barras existentes em todo o container e documento para evitar duplicações
-    const existingBars = (root.querySelectorAll ? Array.from(root.querySelectorAll(".custom-channels-bar")) : []).concat(
-      (typeof document !== "undefined" && document.querySelectorAll) ? Array.from(document.querySelectorAll(".custom-channels-bar")) : []
-    );
-    const uniqueBars = [...new Set(existingBars)];
-    uniqueBars.forEach(b => b.remove());
+    // Localiza o container do chat e o elemento das mensagens
+    const chatContainer = (root.id === "chat" || root.id === "chat-popout" ? root : root.closest?.("#chat, #chat-popout")) || document.getElementById("chat");
+    const scope = chatContainer || root;
+
+    // Remove barras existentes APENAS dentro deste container para não afetar outras janelas (ex: popout)
+    const existingBars = scope.querySelectorAll ? Array.from(scope.querySelectorAll(".custom-channels-bar")) : [];
+    existingBars.forEach(b => b.remove());
 
     const channels = this.getChannels();
 
@@ -285,11 +286,12 @@ export class ChannelManager {
     });
     nav.appendChild(addBtn);
 
-    // Suporte a rolagem horizontal via roda do mouse (wheel) para sidebars estreitas
+    // Suporte a rolagem horizontal via roda do mouse (wheel) e trackpads para sidebars estreitas
     nav.addEventListener("wheel", (e) => {
-      if (e.deltaY) {
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (delta) {
         e.preventDefault();
-        nav.scrollLeft += e.deltaY;
+        nav.scrollLeft += delta;
       }
     }, { passive: false });
 
@@ -349,8 +351,7 @@ export class ChannelManager {
       });
     });
 
-    // Localiza o container do chat e o elemento das mensagens
-    const chatContainer = (root.id === "chat" ? root : root.closest?.("#chat")) || document.getElementById("chat");
+    // Localiza o elemento das mensagens dentro do container
     const chatLog = (chatContainer && chatContainer.querySelector ? (chatContainer.querySelector("#chat-log, .chat-log") || chatContainer.querySelector("ol, ul")) : null)
       || (root.querySelector ? (root.querySelector("#chat-log, .chat-log") || root.querySelector("ol, ul")) : null);
 
@@ -366,17 +367,23 @@ export class ChannelManager {
       root.appendChild(nav);
     }
 
-    // Previne que o container pai (#chat) acumule qualquer rolagem vertical indevida
-    if (chatContainer && chatContainer.scrollTop > 0) {
+    // Previne que o container pai (#chat) acumule qualquer rolagem indevida e trava no topo
+    if (chatContainer) {
       chatContainer.scrollTop = 0;
+      chatContainer.scrollLeft = 0;
+      if (!chatContainer.dataset?.customScrollLockAttached) {
+        if (chatContainer.dataset) chatContainer.dataset.customScrollLockAttached = "true";
+        chatContainer.addEventListener("scroll", () => {
+          if (chatContainer.scrollTop !== 0) chatContainer.scrollTop = 0;
+          if (chatContainer.scrollLeft !== 0) chatContainer.scrollLeft = 0;
+        }, { passive: true });
+      }
     }
 
-    // Assegura que o botão do canal ativo esteja visível
+    // Assegura que o botão do canal ativo esteja visível sem rolar os containers pais
     const activeTab = nav.querySelector(`.custom-channel-tab[data-channel="${this.activeChannel}"]`);
-    if (activeTab && typeof activeTab.scrollIntoView === "function") {
-      try {
-        activeTab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-      } catch (e) {}
+    if (activeTab) {
+      this.scrollToTab(nav, activeTab);
     }
 
     // Inicializa marcação das mensagens existentes e aplica o filtro
@@ -417,51 +424,81 @@ export class ChannelManager {
   }
 
   /**
+   * Rola a barra de canais suavemente para manter a aba visível sem afetar containers pais
+   * @param {HTMLElement} nav 
+   * @param {HTMLElement} tab 
+   */
+  static scrollToTab(nav, tab) {
+    if (!nav || !tab) return;
+    try {
+      const tabLeft = tab.offsetLeft ?? 0;
+      const tabRight = tabLeft + (tab.offsetWidth || 80);
+      const navLeft = nav.scrollLeft ?? 0;
+      const navWidth = nav.clientWidth || 300;
+      const navRight = navLeft + navWidth;
+
+      if (tabLeft < navLeft) {
+        const target = Math.max(0, tabLeft - 8);
+        if (typeof nav.scrollTo === "function") {
+          nav.scrollTo({ left: target, behavior: "smooth" });
+        } else {
+          nav.scrollLeft = target;
+        }
+      } else if (tabRight > navRight) {
+        const target = tabRight - navWidth + 8;
+        if (typeof nav.scrollTo === "function") {
+          nav.scrollTo({ left: target, behavior: "smooth" });
+        } else {
+          nav.scrollLeft = target;
+        }
+      }
+    } catch (e) {}
+  }
+
+  /**
    * Atualiza as classes ativas e os badges na barra de canais
    */
   static updateBarUI() {
-    const bar = document.querySelector(".custom-channels-bar");
-    if (!bar) {
+    const bars = document.querySelectorAll ? Array.from(document.querySelectorAll(".custom-channels-bar")) : [document.querySelector(".custom-channels-bar")].filter(Boolean);
+    if (!bars.length) {
       const chat = document.getElementById("chat");
       if (chat) this.renderBar(ui.chat, chat);
       return;
     }
 
-    const buttons = bar.querySelectorAll(".custom-channel-tab");
-    buttons.forEach(btn => {
-      const ch = btn.dataset.channel;
-      const isActive = ch === this.activeChannel;
-      if (isActive) {
-        btn.classList.add("active");
-        btn.setAttribute("aria-selected", "true");
-        if (typeof btn.scrollIntoView === "function") {
-          try {
-            btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-          } catch (e) {}
+    bars.forEach(bar => {
+      const buttons = bar.querySelectorAll(".custom-channel-tab");
+      buttons.forEach(btn => {
+        const ch = btn.dataset.channel;
+        const isActive = ch === this.activeChannel;
+        if (isActive) {
+          btn.classList.add("active");
+          btn.setAttribute("aria-selected", "true");
+          this.scrollToTab(bar, btn);
+        } else {
+          btn.classList.remove("active");
+          btn.setAttribute("aria-selected", "false");
         }
-      } else {
-        btn.classList.remove("active");
-        btn.setAttribute("aria-selected", "false");
-      }
 
-      // Atualiza badge
-      const unread = this.unreadCounts[ch] || 0;
-      let badge = btn.querySelector(".channel-unread-badge");
-      if (unread > 0) {
-        if (!badge) {
-          badge = document.createElement("span");
-          badge.className = "channel-unread-badge";
-          const delIcon = btn.querySelector(".channel-del-icon");
-          if (delIcon) {
-            btn.insertBefore(badge, delIcon);
-          } else {
-            btn.appendChild(badge);
+        // Atualiza badge
+        const unread = this.unreadCounts[ch] || 0;
+        let badge = btn.querySelector(".channel-unread-badge");
+        if (unread > 0) {
+          if (!badge) {
+            badge = document.createElement("span");
+            badge.className = "channel-unread-badge";
+            const delIcon = btn.querySelector(".channel-del-icon");
+            if (delIcon) {
+              btn.insertBefore(badge, delIcon);
+            } else {
+              btn.appendChild(badge);
+            }
           }
+          badge.textContent = unread > 99 ? "99+" : unread;
+        } else if (badge) {
+          badge.remove();
         }
-        badge.textContent = unread > 99 ? "99+" : unread;
-      } else if (badge) {
-        badge.remove();
-      }
+      });
     });
   }
 

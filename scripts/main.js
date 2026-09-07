@@ -92,8 +92,12 @@ Hooks.on("changeSidebarTab", (app) => {
   const isChatTab = tabName === "chat" || !tabName || (chatEl && chatEl.classList.contains("active"));
 
   if (isChatTab && chatEl) {
+    if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
+    if (chatEl.scrollLeft > 0) chatEl.scrollLeft = 0;
     if (!chatEl.querySelector(".custom-channels-bar")) {
       ChannelManager.renderBar(ui.chat, chatEl);
+    } else {
+      ChannelManager.updateBarUI();
     }
     if (!chatEl.querySelector(".custom-chat-media-toolbar")) {
       ImageHandler.initInput(ui.chat, chatEl);
@@ -107,10 +111,40 @@ Hooks.on("changeSidebarTab", (app) => {
 Hooks.on("collapseSidebar", (sidebar, collapsed) => {
   if (!collapsed) {
     const chatEl = document.getElementById("chat");
-    if (chatEl && !chatEl.querySelector(".custom-channels-bar")) {
-      ChannelManager.renderBar(ui.chat, chatEl);
+    if (chatEl) {
+      if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
+      if (!chatEl.querySelector(".custom-channels-bar")) {
+        ChannelManager.renderBar(ui.chat, chatEl);
+      } else {
+        ChannelManager.updateBarUI();
+      }
     }
   }
+});
+
+/**
+ * Garante que qualquer ImagePopout nativo do Foundry VTT seja centralizado e contido no viewport
+ */
+Hooks.on("renderImagePopout", (app, html, data) => {
+  const el = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : app?.element?.[0] || app?.element);
+  if (!el) return;
+
+  try {
+    const maxWidth = Math.floor(window.innerWidth * 0.9);
+    const maxHeight = Math.floor(window.innerHeight * 0.9);
+    if (app?.position) {
+      const currentW = app.position.width || el.offsetWidth || 400;
+      const currentH = app.position.height || el.offsetHeight || 300;
+      const newW = Math.min(currentW, maxWidth);
+      const newH = Math.min(currentH, maxHeight);
+      app.setPosition({
+        width: newW,
+        height: newH,
+        left: Math.max(10, Math.floor((window.innerWidth - newW) / 2)),
+        top: Math.max(10, Math.floor((window.innerHeight - newH) / 2))
+      });
+    }
+  } catch (e) {}
 });
 
 /**

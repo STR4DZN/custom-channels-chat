@@ -247,7 +247,7 @@ export class ImageHandler {
       <div class="custom-image-lightbox-backdrop"></div>
       <div class="custom-image-lightbox-content">
         <div class="custom-image-lightbox-toolbar">
-          <a href="${src}" target="_blank" rel="noopener noreferrer" class="custom-lightbox-btn custom-lightbox-open-ext" title="Abrir imagem original em nova aba">
+          <a href="#" target="_blank" rel="noopener noreferrer" class="custom-lightbox-btn custom-lightbox-open-ext" title="Abrir imagem original em nova aba">
             <i class="fas fa-external-link-alt"></i> <span>Abrir Original</span>
           </a>
           <button type="button" class="custom-lightbox-btn custom-lightbox-close" title="Fechar (Esc)" aria-label="Fechar">
@@ -255,10 +255,38 @@ export class ImageHandler {
           </button>
         </div>
         <div class="custom-image-lightbox-img-wrap">
-          <img src="${src}" class="custom-lightbox-image" alt="${altText}" />
+          <img class="custom-lightbox-image" />
         </div>
       </div>
     `;
+
+    const imgEl = overlay.querySelector(".custom-lightbox-image");
+    if (imgEl) {
+      imgEl.src = src;
+      imgEl.alt = String(altText || "Visualização de Imagem");
+    }
+
+    const openExtBtn = overlay.querySelector(".custom-lightbox-open-ext");
+    if (openExtBtn) {
+      openExtBtn.href = src;
+      openExtBtn.addEventListener("click", (e) => {
+        if (src.startsWith("data:")) {
+          e.preventDefault();
+          e.stopPropagation();
+          const w = window.open("");
+          if (w) {
+            w.document.write(`
+              <!DOCTYPE html>
+              <html>
+                <head><title>Visualização de Imagem</title><style>body{margin:0;background:#0e1015;display:flex;align-items:center;justify-content:center;height:100vh;}img{max-width:100%;max-height:100%;object-fit:contain;}</style></head>
+                <body><img src="${src}" alt="Imagem Original" /></body>
+              </html>
+            `);
+            w.document.close();
+          }
+        }
+      });
+    }
 
     let closed = false;
     const closeLightbox = () => {
@@ -266,6 +294,9 @@ export class ImageHandler {
       closed = true;
       overlay.classList.remove("active");
       document.removeEventListener("keydown", handleKeydown);
+      if (document.body?.classList) {
+        document.body.classList.remove("custom-lightbox-open");
+      }
       setTimeout(() => {
         if (overlay.parentElement) overlay.remove();
       }, 200);
@@ -278,16 +309,6 @@ export class ImageHandler {
       }
     };
 
-    // Fechar ao clicar no backdrop escuro
-    const backdrop = overlay.querySelector(".custom-image-lightbox-backdrop");
-    if (backdrop) {
-      backdrop.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeLightbox();
-      });
-    }
-
     // Fechar ao clicar no botão 'X'
     const closeBtn = overlay.querySelector(".custom-lightbox-close");
     if (closeBtn) {
@@ -298,7 +319,21 @@ export class ImageHandler {
       });
     }
 
+    // Fechar ao clicar no fundo (fora da imagem e dos botões)
+    overlay.addEventListener("click", (e) => {
+      const isBtn = e.target.closest?.(".custom-lightbox-btn");
+      const isImg = e.target.closest?.(".custom-lightbox-image");
+      if (!isBtn && !isImg) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
+      }
+    });
+
     document.addEventListener("keydown", handleKeydown);
+    if (document.body?.classList) {
+      document.body.classList.add("custom-lightbox-open");
+    }
     document.body.appendChild(overlay);
 
     // Animação de entrada suave
@@ -322,16 +357,24 @@ export class ImageHandler {
       const target = event.target;
       if (!target) return;
 
-      const img = (target.classList && target.classList.contains("discord-chat-img"))
-        ? target
-        : (target.closest ? target.closest(".discord-chat-img, .discord-image-container img") : null);
+      // Ignora elementos de controle ou avatar
+      if (target.closest?.(".discord-avatar-wrap, .avatar, .dice-roll, .dice-icon, .message-header, button, a")) {
+        return;
+      }
+
+      // Detecta imagem de chat do módulo ou qualquer imagem dentro do corpo da mensagem
+      const isCustomChatImg = target.classList?.contains("discord-chat-img") || target.closest?.(".discord-image-container img");
+      const isChatContentImg = target.tagName === "IMG" && target.closest?.("#chat-log, .chat-log, #chat, #chat-popout");
+
+      const img = isCustomChatImg ? (target.tagName === "IMG" ? target : target.querySelector?.("img")) : (isChatContentImg ? target : null);
 
       if (img && img.src) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation?.();
         this.openLightbox(img.src, img.alt || "Visualização de Imagem");
       }
-    });
+    }, true); // Intercepta na fase de captura (capture: true) antes de qualquer stopPropagation
   }
 
   /**
