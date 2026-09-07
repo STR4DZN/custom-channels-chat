@@ -226,23 +226,110 @@ export class ImageHandler {
   }
 
   /**
+   * Abre o visualizador moderno e responsivo (Lightbox) perfeitamente adaptado ao viewport
+   * @param {string} src - URL ou base64 da imagem
+   * @param {string} [altText]
+   */
+  static openLightbox(src, altText = "Visualização de Imagem") {
+    if (!src) return null;
+
+    // Remove visualizador anterior se existente para evitar sobreposição
+    const existing = document.querySelector(".custom-image-lightbox-overlay");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "custom-image-lightbox-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Visualizador de Imagem");
+
+    overlay.innerHTML = `
+      <div class="custom-image-lightbox-backdrop"></div>
+      <div class="custom-image-lightbox-content">
+        <div class="custom-image-lightbox-toolbar">
+          <a href="${src}" target="_blank" rel="noopener noreferrer" class="custom-lightbox-btn custom-lightbox-open-ext" title="Abrir imagem original em nova aba">
+            <i class="fas fa-external-link-alt"></i> <span>Abrir Original</span>
+          </a>
+          <button type="button" class="custom-lightbox-btn custom-lightbox-close" title="Fechar (Esc)" aria-label="Fechar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="custom-image-lightbox-img-wrap">
+          <img src="${src}" class="custom-lightbox-image" alt="${altText}" />
+        </div>
+      </div>
+    `;
+
+    let closed = false;
+    const closeLightbox = () => {
+      if (closed) return;
+      closed = true;
+      overlay.classList.remove("active");
+      document.removeEventListener("keydown", handleKeydown);
+      setTimeout(() => {
+        if (overlay.parentElement) overlay.remove();
+      }, 200);
+    };
+
+    const handleKeydown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeLightbox();
+      }
+    };
+
+    // Fechar ao clicar no backdrop escuro
+    const backdrop = overlay.querySelector(".custom-image-lightbox-backdrop");
+    if (backdrop) {
+      backdrop.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
+      });
+    }
+
+    // Fechar ao clicar no botão 'X'
+    const closeBtn = overlay.querySelector(".custom-lightbox-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLightbox();
+      });
+    }
+
+    document.addEventListener("keydown", handleKeydown);
+    document.body.appendChild(overlay);
+
+    // Animação de entrada suave
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => overlay.classList.add("active"));
+    } else {
+      overlay.classList.add("active");
+    }
+
+    return overlay;
+  }
+
+  /**
    * Configura o listener de clique global para visualização ampliada (Lightbox)
    */
   static setupLightboxListener() {
-    if (document.body?.dataset.customImgLightboxAttached) return;
-    if (document.body) document.body.dataset.customImgLightboxAttached = "true";
+    if (document.body?.dataset?.customImgLightboxAttached) return;
+    if (document.body?.dataset) document.body.dataset.customImgLightboxAttached = "true";
 
     document.addEventListener("click", (event) => {
       const target = event.target;
-      if (target && target.classList && target.classList.contains("discord-chat-img")) {
+      if (!target) return;
+
+      const img = (target.classList && target.classList.contains("discord-chat-img"))
+        ? target
+        : (target.closest ? target.closest(".discord-chat-img, .discord-image-container img") : null);
+
+      if (img && img.src) {
         event.preventDefault();
         event.stopPropagation();
-        if (typeof ImagePopout !== "undefined") {
-          new ImagePopout(target.src, {
-            title: "Visualização de Imagem",
-            shareable: true
-          }).render(true);
-        }
+        this.openLightbox(img.src, img.alt || "Visualização de Imagem");
       }
     });
   }

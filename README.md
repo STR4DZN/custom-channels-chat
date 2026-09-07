@@ -7,7 +7,7 @@ Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiên
 ## 🚀 Principais Funcionalidades
 
 1. **Canais e Abas no Chat (#geral, #off-topic, #dados):**
-   - Cria uma barra de canais estilizada no topo da aba de chat com alternância rápida e instantânea.
+   - Cria uma barra de canais estilizada no topo da aba de chat, fixada com `sticky` e rolagem horizontal suave para garantir compatibilidade com sidebars estreitas e qualquer resolução de tela.
    - **Criar novos chats diretamente pela UI:** botão `+` na barra de canais para criar canais instantaneamente sem precisar acessar configurações do mundo.
    - **Gerenciar/Excluir canais:** o Mestre pode excluir canais criados (com proteção automática para os canais `#geral` e `#dados`).
    - Sincronização em tempo real via Sockets e World Settings entre Mestre e Jogadores.
@@ -24,7 +24,7 @@ Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiên
    - **Colar da área de transferência (Ctrl+V):** tire um print ou copie uma imagem e pressione `Ctrl+V` em qualquer lugar do chat para enviar.
    - **Arrastar e Soltar (Drag & Drop):** arraste imagens do seu computador diretamente para a caixa de chat.
    - **Upload seguro no servidor:** as imagens são salvas em `[Data]/worlds/<seu-mundo>/chat-uploads/` com fallback automático em Base64 otimizado.
-   - **Visualizador Ampliado (Lightbox):** clique em qualquer imagem no chat para abri-la em tela cheia via `ImagePopout` nativo do Foundry.
+   - **Visualizador Ampliado (Lightbox Responsivo):** clique em qualquer imagem ou GIF para abri-la em um visualizador moderno com fundo translúcido escurecido, perfeitamente adaptado e limitado ao viewport (`max-width: 90vw; max-height: 90vh;`), suporte a tecla Esc, clique fora para fechar e botão de Abrir Original.
 
 4. **Identidade Real do Usuário (Estilo Discord):**
    - Conversas de texto usam o avatar e o nome da conta do jogador, garantindo uma conversa fluida sem alterar o token selecionado no mapa.

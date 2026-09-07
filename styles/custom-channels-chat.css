@@ -2,70 +2,127 @@
    Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13 e v12
    ========================================================================== */
 
-/* Barra de Canais no Topo do Chat */
+/* Container do Chat (Garante layout fixo flexível e previne rolagem indevida do painel pai) */
+#chat,
+#sidebar .tab[data-tab="chat"],
+#sidebar section#chat,
+section#chat.sidebar-tab {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Área de Rolagem das Mensagens */
+#chat-log,
+.chat-log {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Barra de Canais no Topo do Chat (Sempre fixada, sticky e responsiva) */
 .custom-channels-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  background: rgba(18, 19, 22, 0.92);
-  padding: 6px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px 4px 0 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  margin-bottom: 6px;
-  position: relative !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 5px !important;
+  background: rgba(18, 19, 22, 0.96) !important;
+  padding: 6px 8px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 4px 4px 0 0 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35) !important;
+  margin-bottom: 4px !important;
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
   z-index: 100 !important;
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  white-space: nowrap !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.25) rgba(0, 0, 0, 0.2) !important;
   pointer-events: auto !important;
+  user-select: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollbar fina e moderna para a barra de canais */
+.custom-channels-bar::-webkit-scrollbar {
+  height: 4px !important;
+}
+
+.custom-channels-bar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-radius: 2px !important;
+}
+
+.custom-channels-bar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 4px !important;
+}
+
+.custom-channels-bar::-webkit-scrollbar-thumb:hover {
+  background: #5865f2 !important;
 }
 
 /* Botões / Abas de Canal */
 .custom-channel-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 4px;
-  color: #949ba4;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 8px;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 4px !important;
+  color: #949ba4 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 4px 8px !important;
   cursor: pointer !important;
-  transition: all 0.15s ease-in-out;
-  line-height: 1;
-  user-select: none;
+  transition: all 0.15s ease-in-out !important;
+  line-height: 1 !important;
+  user-select: none !important;
   pointer-events: auto !important;
-  position: relative;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
 }
 
 .custom-channel-tab:hover {
-  background: rgba(255, 255, 255, 0.13);
-  color: #dbdee1;
+  background: rgba(255, 255, 255, 0.13) !important;
+  color: #dbdee1 !important;
 }
 
 /* Canal Ativo */
 .custom-channel-tab.active {
   background: #5865f2 !important; /* Discord Blurple */
   color: #ffffff !important;
-  border-color: transparent;
-  font-weight: 600;
-  box-shadow: 0 1px 4px rgba(88, 101, 242, 0.4);
+  border-color: transparent !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 4px rgba(88, 101, 242, 0.4) !important;
 }
 
 .custom-channel-tab .channel-hash {
-  color: #80848e;
-  font-weight: 700;
-  pointer-events: none;
+  color: #80848e !important;
+  font-weight: 700 !important;
+  pointer-events: none !important;
 }
 
 .custom-channel-tab.active .channel-hash {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .custom-channel-tab .channel-name {
-  pointer-events: none;
+  pointer-events: none !important;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Ícone de Exclusão de Canal (Para o Mestre) */
@@ -89,28 +146,31 @@
 
 /* Botão de Adicionar Canal (+) */
 .custom-channel-add-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #949ba4;
-  font-size: 10px;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+  border-radius: 4px !important;
+  color: #949ba4 !important;
+  font-size: 10px !important;
   cursor: pointer !important;
-  transition: all 0.15s ease-in-out;
+  transition: all 0.15s ease-in-out !important;
   pointer-events: auto !important;
-  padding: 0;
-  margin-left: 2px;
+  padding: 0 !important;
+  margin-left: 2px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
 }
 
 .custom-channel-add-btn:hover {
-  background: #5865f2;
-  border-color: transparent;
-  color: #ffffff;
-  transform: scale(1.06);
+  background: #5865f2 !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  transform: scale(1.06) !important;
 }
 
 /* Badge de Mensagens Não Lidas */
@@ -125,6 +185,7 @@
   line-height: 1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* Barra de Ferramentas de Mídia (Botões Imagem e GIF/URL) */
@@ -211,6 +272,142 @@
   margin: 0 0 4px 0;
   color: #dbdee1;
   word-break: break-word;
+}
+
+/* ==========================================================================
+   VISUALIZADOR MODERNO E RESPONSIVO DE IMAGEM (LIGHTBOX)
+   Garantido para caber dentro do viewport do usuário em qualquer resolução
+   ========================================================================== */
+
+.custom-image-lightbox-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 999999 !important; /* Camada superior a todas as janelas do Foundry */
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box !important;
+}
+
+.custom-image-lightbox-overlay.active {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.custom-image-lightbox-backdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  background: rgba(10, 12, 16, 0.88) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  cursor: zoom-out !important;
+}
+
+.custom-image-lightbox-content {
+  position: relative !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-width: 95vw !important;
+  max-height: 95vh !important;
+  box-sizing: border-box !important;
+}
+
+.custom-image-lightbox-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  width: 100% !important;
+  margin-bottom: 8px !important;
+}
+
+.custom-lightbox-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(30, 32, 38, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  color: #f2f3f5 !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  line-height: 1 !important;
+}
+
+.custom-lightbox-btn:hover {
+  background: #5865f2 !important;
+  border-color: #5865f2 !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+.custom-lightbox-close {
+  width: 30px !important;
+  height: 30px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+}
+
+.custom-image-lightbox-img-wrap {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+  overflow: hidden !important;
+}
+
+.custom-lightbox-image {
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  margin: auto !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  user-select: none !important;
+  display: block !important;
+}
+
+/* Regras de proteção para ImagePopout nativo do Foundry VTT */
+.image-popout {
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+}
+
+.image-popout .window-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.image-popout img,
+.image-popout video {
+  max-width: 90vw !important;
+  max-height: calc(90vh - 32px) !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  margin: auto !important;
 }
 
 /* Ocultação de Mensagens Fora do Canal Ativo */

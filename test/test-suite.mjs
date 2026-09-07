@@ -1,6 +1,6 @@
 /**
  * Suite de Testes Automatizados e Benchmark de Performance
- * para o módulo custom-channels-chat v1.2.0
+ * para o módulo custom-channels-chat v1.3.0
  */
 
 import { ChannelManager } from "../scripts/channel-manager.js";
@@ -17,11 +17,9 @@ class MockClassList {
   }
   add(cls) {
     this.classes.add(cls);
-    this.el.className = Array.from(this.classes).join(" ");
   }
   remove(cls) {
     this.classes.delete(cls);
-    this.el.className = Array.from(this.classes).join(" ");
   }
   contains(cls) { return this.classes.has(cls); }
   toggle(cls, force) {
@@ -40,11 +38,53 @@ class MockElement {
     this.classList = new MockClassList(this);
     this.style = {};
     this.attributes = {};
-    this.innerHTML = "";
+    this._innerHTML = "";
     this.textContent = "";
     this.id = "";
-    this.className = "";
     this.listeners = {};
+    this.scrollLeft = 0;
+  }
+
+  set className(val) {
+    this.classList.classes = new Set(String(val || "").split(/\s+/).filter(Boolean));
+  }
+
+  get className() {
+    return Array.from(this.classList.classes).join(" ");
+  }
+
+  set innerHTML(html) {
+    this._innerHTML = String(html);
+    this.children = [];
+    if (!html || typeof html !== "string") return;
+    const matches = html.matchAll(/<([a-zA-Z0-9]+)([^>]*)>/g);
+    for (const m of matches) {
+      const tag = m[1];
+      const attrs = m[2];
+      const child = new MockElement(tag);
+      child.parentElement = this;
+      const classMatch = attrs.match(/class=["']([^"']+)["']/);
+      if (classMatch) {
+        classMatch[1].split(/\s+/).filter(Boolean).forEach(c => child.classList.add(c));
+      }
+      const idMatch = attrs.match(/id=["']([^"']+)["']/);
+      if (idMatch) child.id = idMatch[1];
+      const srcMatch = attrs.match(/src=["']([^"']+)["']/);
+      if (srcMatch) child.src = srcMatch[1];
+      const hrefMatch = attrs.match(/href=["']([^"']+)["']/);
+      if (hrefMatch) child.href = hrefMatch[1];
+      const roleMatch = attrs.match(/role=["']([^"']+)["']/);
+      if (roleMatch) child.setAttribute("role", roleMatch[1]);
+      this.children.push(child);
+    }
+  }
+
+  get innerHTML() {
+    return this._innerHTML || "";
+  }
+
+  scrollIntoView() {
+    this.scrolledIntoView = true;
   }
 
   setAttribute(name, val) { this.attributes[name] = String(val); }
@@ -53,6 +93,18 @@ class MockElement {
     if (child instanceof MockElement) {
       child.parentElement = this;
       this.children.push(child);
+    }
+    return child;
+  }
+  insertBefore(child, ref) {
+    if (child instanceof MockElement) {
+      child.parentElement = this;
+      const idx = ref ? this.children.indexOf(ref) : -1;
+      if (idx !== -1) {
+        this.children.splice(idx, 0, child);
+      } else {
+        this.children.push(child);
+      }
     }
     return child;
   }
@@ -174,6 +226,8 @@ const mockChatTextarea = new MockElement("textarea");
 mockChatTextarea.id = "chat-message";
 mockChat.appendChild(mockChatTextarea);
 
+const documentListeners = {};
+
 globalThis.document = {
   head: mockHead,
   body: new MockElement("body"),
@@ -205,7 +259,18 @@ globalThis.document = {
     const inBody = document.body.querySelectorAll(sel);
     return [...inChat, ...inBody];
   },
-  addEventListener() {}
+  addEventListener(event, cb) {
+    if (!documentListeners[event]) documentListeners[event] = [];
+    documentListeners[event].push(cb);
+  },
+  removeEventListener(event, cb) {
+    if (!documentListeners[event]) return;
+    documentListeners[event] = documentListeners[event].filter(h => h !== cb);
+  },
+  dispatchEvent(event) {
+    const handlers = documentListeners[event.type] || [];
+    for (const h of handlers) h(event);
+  }
 };
 
 // Mock do objeto `game` do Foundry
@@ -306,7 +371,7 @@ function assert(condition, message) {
 }
 
 console.log("\n========================================================");
-console.log("   INICIANDO SUITE DE TESTES v1.2.0: custom-channels-chat");
+console.log("   INICIANDO SUITE DE TESTES v1.3.0: custom-channels-chat");
 console.log("========================================================\n");
 
 // TESTE 1: Lista padrão de canais
@@ -598,6 +663,65 @@ globalThis.FileReader = class {
 
 const base64Result = await ImageHandler.fileToBase64(fakeFile);
 assert(base64Result.startsWith("data:image/png;base64,"), "Fallback Base64 funcionou corretamente com Data URL");
+
+// TESTE 16: Visualizador Responsivo Lightbox (Viewport-adapted)
+console.log("\nTeste 16: Visualizador Responsivo Lightbox (openLightbox, Esc, Close, Open Original)");
+const lightboxOverlay = ImageHandler.openLightbox("https://example.com/mapa-mundi.png", "Mapa Épico");
+assert(lightboxOverlay !== null, "Lightbox instanciado com sucesso");
+assert(lightboxOverlay.classList.contains("custom-image-lightbox-overlay"), "Overlay possui classe .custom-image-lightbox-overlay");
+assert(lightboxOverlay.classList.contains("active"), "Overlay possui classe .active para animação suave");
+assert(document.body.children.includes(lightboxOverlay), "Lightbox inserido no document.body");
+
+const lbImg = lightboxOverlay.querySelector(".custom-lightbox-image");
+assert(lbImg !== null && lbImg.src === "https://example.com/mapa-mundi.png", "Imagem carregada no Lightbox com URL correta");
+
+const openExtBtn = lightboxOverlay.querySelector(".custom-lightbox-open-ext");
+assert(openExtBtn !== null && openExtBtn.href === "https://example.com/mapa-mundi.png", "Botão 'Abrir Original' presente com link correto");
+
+// Testa tecla Escape para fechar
+document.dispatchEvent({ type: "keydown", key: "Escape", preventDefault() {} });
+assert(!lightboxOverlay.classList.contains("active"), "Pressionar Escape remove classe .active para fechar Lightbox");
+
+// Testa clique em .discord-chat-img disparando Lightbox
+let openedUrl = "";
+const origOpenLightbox = ImageHandler.openLightbox;
+ImageHandler.openLightbox = (src) => { openedUrl = src; return null; };
+
+const fakeChatImg = new MockElement("img");
+fakeChatImg.className = "discord-chat-img";
+fakeChatImg.src = "https://example.com/aventura.png";
+mockChatLog.appendChild(fakeChatImg);
+
+document.dispatchEvent({
+  type: "click",
+  target: fakeChatImg,
+  preventDefault() {},
+  stopPropagation() {}
+});
+assert(openedUrl === "https://example.com/aventura.png", "Clique em .discord-chat-img aciona abertura automática do Lightbox");
+ImageHandler.openLightbox = origOpenLightbox;
+
+// TESTE 17: Barra de Canais Fixada (Sticky), Rolagem Horizontal e Truncamento de Nome
+console.log("\nTeste 17: Barra de Canais Pinned/Sticky e Rolagem Horizontal (Wheel)");
+ChannelManager.renderBar(ui.chat, mockChat);
+const stickyBar = mockChat.querySelector(".custom-channels-bar");
+assert(stickyBar !== null, "Barra de canais renderizada no topo");
+
+// Simula scroll wheel horizontal na barra
+stickyBar.dispatchEvent({ type: "wheel", deltaY: 150, preventDefault() {} });
+assert(stickyBar.scrollLeft === 150, "Evento de roda do mouse (wheel) realiza rolagem horizontal em sidebars estreitas");
+
+// Truncamento seguro de nomes longos de canal a no máximo 30 caracteres
+const longChannelResult = await ChannelManager.createChannel("canal-com-nome-extremamente-longo-que-ultrapassa-trinta-caracteres");
+assert(longChannelResult.success === true, "Canal criado com sucesso");
+assert(longChannelResult.channel.length <= 30, `Nome do canal limitado a 30 caracteres (atual: ${longChannelResult.channel.length})`);
+
+// TESTE 18: Isolamento do Container e Posicionamento Fora do ChatLog
+console.log("\nTeste 18: Isolamento de Rolagem e Inserção Fora do ChatLog");
+const chatLogEl = mockChat.querySelector("#chat-log");
+assert(!chatLogEl.children.some(c => c.matches?.(".custom-channels-bar")), "Barra de canais NÃO está contida dentro do #chat-log");
+assert(mockChat.children[0] === stickyBar || mockChat.children.indexOf(stickyBar) < mockChat.children.indexOf(chatLogEl), "Barra de canais está posicionada firmemente ANTES do #chat-log");
+
 
 // ============================================================================
 // 3. BENCHMARK DE PERFORMANCE & CARGA

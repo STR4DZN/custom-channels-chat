@@ -78,7 +78,8 @@ export class ChannelManager {
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9\-_]/g, "");
+      .replace(/[^a-z0-9\-_]/g, "")
+      .slice(0, 30);
 
     if (!cleanName) {
       ui.notifications?.warn?.("Nome de canal inválido.");
@@ -208,9 +209,12 @@ export class ChannelManager {
     const root = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : document.getElementById("chat"));
     if (!root) return;
 
-    // Remove barras existentes em todo o container para evitar duplicações em re-render
-    const existingBars = root.querySelectorAll ? root.querySelectorAll(".custom-channels-bar") : [];
-    existingBars.forEach(b => b.remove());
+    // Remove barras existentes em todo o container e documento para evitar duplicações
+    const existingBars = (root.querySelectorAll ? Array.from(root.querySelectorAll(".custom-channels-bar")) : []).concat(
+      (typeof document !== "undefined" && document.querySelectorAll) ? Array.from(document.querySelectorAll(".custom-channels-bar")) : []
+    );
+    const uniqueBars = [...new Set(existingBars)];
+    uniqueBars.forEach(b => b.remove());
 
     const channels = this.getChannels();
 
@@ -281,6 +285,14 @@ export class ChannelManager {
     });
     nav.appendChild(addBtn);
 
+    // Suporte a rolagem horizontal via roda do mouse (wheel) para sidebars estreitas
+    nav.addEventListener("wheel", (e) => {
+      if (e.deltaY) {
+        e.preventDefault();
+        nav.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+
     // Delegação de eventos de clique com alta confiabilidade na barra
     nav.addEventListener("click", (e) => {
       e.preventDefault?.();
@@ -337,14 +349,34 @@ export class ChannelManager {
       });
     });
 
-    // Insere a barra no topo do chat log
-    const chatLog = root.querySelector ? (root.querySelector("#chat-log") || root.querySelector(".chat-log")) : null;
-    if (chatLog) {
+    // Localiza o container do chat e o elemento das mensagens
+    const chatContainer = (root.id === "chat" ? root : root.closest?.("#chat")) || document.getElementById("chat");
+    const chatLog = (chatContainer && chatContainer.querySelector ? (chatContainer.querySelector("#chat-log, .chat-log") || chatContainer.querySelector("ol, ul")) : null)
+      || (root.querySelector ? (root.querySelector("#chat-log, .chat-log") || root.querySelector("ol, ul")) : null);
+
+    if (chatLog && chatLog.parentElement && typeof chatLog.parentElement.insertBefore === "function") {
+      chatLog.parentElement.insertBefore(nav, chatLog);
+    } else if (chatLog && typeof chatLog.before === "function") {
       chatLog.before(nav);
+    } else if (chatContainer && typeof chatContainer.prepend === "function") {
+      chatContainer.prepend(nav);
     } else if (root.prepend) {
       root.prepend(nav);
     } else if (root.appendChild) {
       root.appendChild(nav);
+    }
+
+    // Previne que o container pai (#chat) acumule qualquer rolagem vertical indevida
+    if (chatContainer && chatContainer.scrollTop > 0) {
+      chatContainer.scrollTop = 0;
+    }
+
+    // Assegura que o botão do canal ativo esteja visível
+    const activeTab = nav.querySelector(`.custom-channel-tab[data-channel="${this.activeChannel}"]`);
+    if (activeTab && typeof activeTab.scrollIntoView === "function") {
+      try {
+        activeTab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      } catch (e) {}
     }
 
     // Inicializa marcação das mensagens existentes e aplica o filtro
@@ -389,7 +421,11 @@ export class ChannelManager {
    */
   static updateBarUI() {
     const bar = document.querySelector(".custom-channels-bar");
-    if (!bar) return;
+    if (!bar) {
+      const chat = document.getElementById("chat");
+      if (chat) this.renderBar(ui.chat, chat);
+      return;
+    }
 
     const buttons = bar.querySelectorAll(".custom-channel-tab");
     buttons.forEach(btn => {
@@ -398,6 +434,11 @@ export class ChannelManager {
       if (isActive) {
         btn.classList.add("active");
         btn.setAttribute("aria-selected", "true");
+        if (typeof btn.scrollIntoView === "function") {
+          try {
+            btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          } catch (e) {}
+        }
       } else {
         btn.classList.remove("active");
         btn.setAttribute("aria-selected", "false");

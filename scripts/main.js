@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.2.0...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.3.0...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -81,6 +81,36 @@ Hooks.once("ready", () => {
 Hooks.on("renderChatLog", (app, html, data) => {
   ChannelManager.renderBar(app, html);
   ImageHandler.initInput(app, html);
+});
+
+/**
+ * Garante que a barra e a toolbar estejam ativas ao trocar para a aba do chat
+ */
+Hooks.on("changeSidebarTab", (app) => {
+  const tabName = app?.tabName || (app && app[0]?.dataset?.tab) || (typeof app === "string" ? app : null);
+  const chatEl = document.getElementById("chat");
+  const isChatTab = tabName === "chat" || !tabName || (chatEl && chatEl.classList.contains("active"));
+
+  if (isChatTab && chatEl) {
+    if (!chatEl.querySelector(".custom-channels-bar")) {
+      ChannelManager.renderBar(ui.chat, chatEl);
+    }
+    if (!chatEl.querySelector(".custom-chat-media-toolbar")) {
+      ImageHandler.initInput(ui.chat, chatEl);
+    }
+  }
+});
+
+/**
+ * Garante re-renderização ao expandir a barra lateral
+ */
+Hooks.on("collapseSidebar", (sidebar, collapsed) => {
+  if (!collapsed) {
+    const chatEl = document.getElementById("chat");
+    if (chatEl && !chatEl.querySelector(".custom-channels-bar")) {
+      ChannelManager.renderBar(ui.chat, chatEl);
+    }
+  }
 });
 
 /**
