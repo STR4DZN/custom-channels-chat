@@ -1,6 +1,6 @@
 /**
  * Suite de Testes Automatizados e Benchmark de Performance
- * para o módulo custom-channels-chat v1.4.0
+ * para o módulo custom-channels-chat v1.4.1
  */
 
 import fs from "fs";
@@ -454,7 +454,7 @@ function assert(condition, message) {
 }
 
 console.log("\n========================================================");
-console.log("   INICIANDO SUITE DE TESTES v1.4.0: custom-channels-chat");
+console.log("   INICIANDO SUITE DE TESTES v1.4.1: custom-channels-chat");
 console.log("========================================================\n");
 
 // TESTE 1: Lista padrão de canais
@@ -907,9 +907,11 @@ const cssContent = fs.readFileSync(cssPath, "utf-8");
 assert(cssContent.includes("#chat.active"), "Regra CSS do container do chat restrita à classe .active");
 assert(cssContent.includes('#sidebar .tab[data-tab="chat"].active'), "Regra da tab chat restrita à classe .active");
 assert(cssContent.includes("section#chat.sidebar-tab.active"), "Regra section#chat restrita à classe .active");
-assert(cssContent.includes('#sidebar .tab[data-tab="chat"]:not(.active)'), "Regra explícita de display: none para chat inativo na sidebar");
+assert(cssContent.includes('#sidebar #chat:not(.active)'), "Regra explícita de display: none para chat inativo na sidebar");
 assert(cssContent.includes('#chat:not(.active):not(#chat-popout):not(.chat-popout)'), "Chat inativo ocultado com display: none !important exceto se for popout");
 assert(cssContent.includes('#sidebar.collapsed #chat'), "Chat ocultado com display: none !important quando sidebar estiver recolhida");
+assert(cssContent.includes('#chat[hidden]:not(#chat-popout)'), "Chat ocultado com display: none !important quando tiver atributo hidden");
+assert(!cssContent.includes('#sidebar:has(#sidebar-tabs .item:not([data-tab="chat"]).active)'), "CSS não contém seletores destrutivos :has que quebram o chat com abas secundárias ativas");
 
 // Simulação de troca de aba na sidebar para 'actors'
 let chatBarReRendered = false;
@@ -920,23 +922,18 @@ globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
 assert(chatBarReRendered === false, "changeSidebarTab com tabName='actors' NÃO processa aba de chat");
 ChannelManager.renderBar = origRenderBar;
 
-// Verificação de isolamento via syncChatVisibility (esconde #chat com display: none e hidden)
-globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
-assert(mockChat.style.display === "none", "changeSidebarTab para 'actors' aplicou display: none inline no #chat");
-assert(mockChat.hasAttribute("hidden") === true, "changeSidebarTab para 'actors' aplicou atributo hidden no #chat");
-assert(!mockChat.classList.contains("active"), "changeSidebarTab para 'actors' removeu classe .active do #chat");
-
+// Verificação de limpeza de inline styles e segurança do DOM no syncChatVisibility
+mockChat.style.setProperty("display", "none");
 globalThis.Hooks.callAll("changeSidebarTab", { tabName: "chat" });
-assert(mockChat.style.display !== "none", "changeSidebarTab para 'chat' removeu display: none inline do #chat");
-assert(mockChat.hasAttribute("hidden") === false, "changeSidebarTab para 'chat' removeu atributo hidden do #chat");
-assert(mockChat.classList.contains("active"), "changeSidebarTab para 'chat' adicionou classe .active ao #chat");
+assert(!mockChat.style.display, "changeSidebarTab para 'chat' removeu qualquer inline style residual de display");
 
-mockSidebar.classList.add("collapsed");
+mockChat.style.setProperty("display", "block");
+globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
+assert(!mockChat.style.display, "changeSidebarTab para 'actors' removeu inline style para confiar exclusivamente no CSS");
+
+mockChat.style.setProperty("display", "inline");
 globalThis.Hooks.callAll("collapseSidebar", mockSidebar, true);
-assert(mockChat.style.display === "none", "collapseSidebar(true) aplicou display: none inline no #chat");
-mockSidebar.classList.remove("collapsed");
-globalThis.Hooks.callAll("collapseSidebar", mockSidebar, false);
-assert(mockChat.style.display !== "none", "collapseSidebar(false) restaurou visualização do #chat quando ativo");
+assert(!mockChat.style.display, "collapseSidebar removeu inline styles residuais permitindo que o CSS gerencie");
 
 // TESTE 24: Detecção Robusta de Rolagens e Dano Multi-Sistemas (ChannelManager.isDiceOrDamage)
 console.log("\nTeste 24: Detector Multi-Sistemas de Rolagens e Dano (D&D 5e, PF2e, Tormenta20, Midi-QOL, etc.)");

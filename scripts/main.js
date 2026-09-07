@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.0...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.1...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -74,26 +74,19 @@ Hooks.once("ready", () => {
     });
   }
 
-  // Sincronização imediata de cliques nas abas da sidebar para evitar sobreposição ou vazamento
-  if (typeof document !== "undefined" && document.addEventListener) {
-    document.addEventListener("click", (e) => {
-      const tabEl = e.target?.closest?.("#sidebar-tabs [data-tab], #sidebar-tabs .item, #sidebar-tabs a");
-      if (tabEl) {
-        const targetTab = tabEl.dataset?.tab;
-        if (targetTab) {
-          syncChatVisibility(targetTab);
-          setTimeout(() => syncChatVisibility(targetTab), 0);
-        }
-      }
-    }, true);
+  // Garante que o elemento #chat não tenha estilos inline bloqueando a renderização
+  const chatEl = document.getElementById("chat");
+  if (chatEl?.style?.display) {
+    chatEl.style.removeProperty("display");
   }
-  syncChatVisibility();
+  if (chatEl?.hasAttribute?.("hidden") && chatEl?.classList?.contains("active")) {
+    chatEl.removeAttribute("hidden");
+  }
 });
 
 /**
- * Sincroniza a visibilidade do elemento #chat quando a aba da sidebar é alterada.
- * Impede que o chat ou qualquer de seus componentes injetados sobreponham
- * outras abas (Atores, Cenas, Combate, etc.) ou permaneçam visíveis com a barra recolhida.
+ * Sincroniza a visibilidade e elementos da interface do #chat.
+ * Remove inline styles residuais e atualiza a barra de canais e media toolbar.
  * @param {string|null} [activeTabName]
  */
 export function syncChatVisibility(activeTabName = null) {
@@ -101,40 +94,26 @@ export function syncChatVisibility(activeTabName = null) {
   const chatEl = document.getElementById("chat");
   if (!chatEl) return;
 
-  // Janelas destacadas de chat (popout) não são afetadas pela sidebar
+  // Remove qualquer display inline residual para que o CSS do Foundry e do módulo controlem a exibição
+  if (chatEl.style?.display) {
+    chatEl.style.removeProperty("display");
+  }
+
   const isPopout = chatEl.closest?.("#chat-popout") || chatEl.closest?.(".chat-popout") || chatEl.id === "chat-popout";
   if (isPopout) return;
 
-  const sidebar = document.getElementById("sidebar");
-  const isCollapsed = sidebar?.classList?.contains("collapsed") ?? false;
-
-  // Determina se a aba de chat está atualmente selecionada
-  const activeTabFromUi = globalThis.ui?.sidebar?.activeTab;
-  const activeTabFromDOM = document.querySelector?.("#sidebar-tabs [data-tab].active, #sidebar-tabs .item.active")?.dataset?.tab;
-
-  let isChatActive;
-  if (activeTabName !== null && activeTabName !== undefined) {
-    isChatActive = activeTabName === "chat";
-  } else if (activeTabFromUi !== undefined && activeTabFromUi !== null) {
-    isChatActive = activeTabFromUi === "chat";
-  } else if (activeTabFromDOM !== undefined && activeTabFromDOM !== null) {
-    isChatActive = activeTabFromDOM === "chat";
-  } else {
-    isChatActive = chatEl.classList?.contains("active");
-  }
-
-  if (!isChatActive || isCollapsed) {
-    // Esconde completamente com inline style !important e atributo hidden
-    chatEl.style?.setProperty?.("display", "none", "important");
-    chatEl.setAttribute?.("hidden", "");
-    if (!isChatActive) {
-      chatEl.classList?.remove?.("active");
+  const isChat = activeTabName === "chat" || (!activeTabName && (chatEl.classList?.contains("active") || globalThis.ui?.sidebar?.activeTab === "chat"));
+  if (isChat) {
+    if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
+    if (chatEl.scrollLeft > 0) chatEl.scrollLeft = 0;
+    if (!chatEl.querySelector(".custom-channels-bar")) {
+      ChannelManager.renderBar(globalThis.ui?.chat, chatEl);
+    } else {
+      ChannelManager.updateBarUI();
     }
-  } else {
-    // Restaura o display e remove hidden para a aba do chat
-    chatEl.style?.removeProperty?.("display");
-    chatEl.removeAttribute?.("hidden");
-    chatEl.classList?.add?.("active");
+    if (!chatEl.querySelector(".custom-chat-media-toolbar")) {
+      ImageHandler.initInput(globalThis.ui?.chat, chatEl);
+    }
   }
 }
 
@@ -142,52 +121,32 @@ export function syncChatVisibility(activeTabName = null) {
  * Hook disparado na renderização do painel do ChatLog
  */
 Hooks.on("renderChatLog", (app, html, data) => {
+  const el = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : document.getElementById("chat"));
+  if (el?.style?.display) {
+    el.style.removeProperty("display");
+  }
   ChannelManager.renderBar(app, html);
   ImageHandler.initInput(app, html);
-  syncChatVisibility();
 });
 
 /**
  * Garante que a barra e a toolbar estejam ativas ao trocar para a aba do chat
- * e oculta estritamente o chat ao mudar para outras abas da sidebar
  */
 Hooks.on("changeSidebarTab", (app) => {
-  const tabName = app?.tabName || (app && app[0]?.dataset?.tab) || (typeof app === "string" ? app : null);
+  const tabName = app?.tabName || (app && app[0]?.dataset?.tab) || (typeof app === "string" ? app : null) || app?.id;
   syncChatVisibility(tabName);
-
-  const chatEl = document.getElementById("chat");
-  const isChatTab = tabName === "chat" || (!tabName && chatEl?.classList?.contains("active") && !chatEl?.hasAttribute?.("hidden"));
-
-  if (isChatTab && chatEl) {
-    if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
-    if (chatEl.scrollLeft > 0) chatEl.scrollLeft = 0;
-    if (!chatEl.querySelector(".custom-channels-bar")) {
-      ChannelManager.renderBar(ui.chat, chatEl);
-    } else {
-      ChannelManager.updateBarUI();
-    }
-    if (!chatEl.querySelector(".custom-chat-media-toolbar")) {
-      ImageHandler.initInput(ui.chat, chatEl);
-    }
-  }
 });
 
 /**
- * Garante re-renderização ao expandir a barra lateral ou ocultação ao recolher
+ * Garante re-renderização ao expandir a barra lateral ou remoção de inline styles
  */
 Hooks.on("collapseSidebar", (sidebar, collapsed) => {
-  syncChatVisibility();
+  const chatEl = document.getElementById("chat");
+  if (chatEl?.style?.display) {
+    chatEl.style.removeProperty("display");
+  }
   if (!collapsed) {
-    const chatEl = document.getElementById("chat");
-    const activeTab = globalThis.ui?.sidebar?.activeTab;
-    if (chatEl && (activeTab === "chat" || (chatEl.classList?.contains("active") && !chatEl.hasAttribute?.("hidden")))) {
-      if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
-      if (!chatEl.querySelector(".custom-channels-bar")) {
-        ChannelManager.renderBar(ui.chat, chatEl);
-      } else {
-        ChannelManager.updateBarUI();
-      }
-    }
+    syncChatVisibility();
   }
 });
 

@@ -32,13 +32,7 @@ section#chat.sidebar-tab:not(.active),
 #sidebar.collapsed section#chat,
 #sidebar [data-tab="chat"][hidden],
 #sidebar section#chat[hidden],
-#chat[hidden]:not(#chat-popout),
-#sidebar:has(#sidebar-tabs [data-tab]:not([data-tab="chat"]).active) #chat,
-#sidebar:has(#sidebar-tabs [data-tab]:not([data-tab="chat"]).active) [data-tab="chat"],
-#sidebar:has(#sidebar-tabs .item:not([data-tab="chat"]).active) #chat,
-#sidebar:has(#sidebar-tabs .tab:not([data-tab="chat"]).active) #chat,
-#sidebar:has(#sidebar-tabs [data-tab="chat"]:not(.active)) #chat,
-#sidebar:has(#sidebar-tabs [data-tab="chat"]:not(.active)) [data-tab="chat"] {
+#chat[hidden]:not(#chat-popout) {
   display: none !important;
 }
 
