@@ -1,6 +1,6 @@
 /**
  * Suite de Testes Automatizados e Benchmark de Performance
- * para o módulo custom-channels-chat v1.1.0
+ * para o módulo custom-channels-chat v1.2.0
  */
 
 import { ChannelManager } from "../scripts/channel-manager.js";
@@ -109,8 +109,8 @@ class MockElement {
       return this.matches(childSel) && this.parentElement && this.parentElement.matches(parentSel);
     }
     if (selector.startsWith(".")) {
-      const cls = selector.slice(1);
-      return this.className.includes(cls) || this.classList.contains(cls);
+      const classes = selector.split(".").filter(Boolean);
+      return classes.every(cls => this.className.includes(cls) || this.classList.contains(cls));
     }
     if (selector.startsWith("#")) {
       return this.id === selector.slice(1);
@@ -306,7 +306,7 @@ function assert(condition, message) {
 }
 
 console.log("\n========================================================");
-console.log("   INICIANDO SUITE DE TESTES v1.1.0: custom-channels-chat");
+console.log("   INICIANDO SUITE DE TESTES v1.2.0: custom-channels-chat");
 console.log("========================================================\n");
 
 // TESTE 1: Lista padrão de canais
@@ -375,11 +375,81 @@ assert(ChannelManager.getActiveChannel() === "geral", "Canal ativo inicial é 'g
 
 const offTopicTab = bar.children.find(c => c.dataset?.channel === "off-topic");
 assert(offTopicTab !== null, "Aba #off-topic encontrada");
+assert(offTopicTab.innerHTML.includes('<span class="channel-name">off-topic</span>'), "Aba possui label HTML com nome do canal");
+assert(offTopicTab.innerHTML.includes('channel-hash'), "Aba possui marcador visual '#' de canal");
+
 offTopicTab.dispatchEvent({ type: "click", preventDefault() {}, stopPropagation() {} });
 assert(ChannelManager.getActiveChannel() === "off-topic", "Clique na aba #off-topic trocou o canal ativo com sucesso");
 
+// TESTE 6b: Exclusão de canal via ícone .channel-del-icon sem trocar o canal ativo
+console.log("\nTeste 6b: Interceptação de clique no ícone de exclusão");
+await ChannelManager.createChannel("canal-teste-del");
+ChannelManager.renderBar(ui.chat, mockChat);
+const delBar = mockChat.querySelector(".custom-channels-bar");
+const delTab = delBar.children.find(c => c.dataset?.channel === "canal-teste-del");
+assert(delTab !== null, "Aba #canal-teste-del criada e encontrada na barra");
+assert(delTab.innerHTML.includes("channel-del-icon"), "Aba deletável possui ícone de exclusão para GM");
+
+let confirmDialogOpen = false;
+let confirmChannel = "";
+const origConfirm = Dialog.confirm;
+Dialog.confirm = (opts) => {
+  confirmDialogOpen = true;
+  if (opts.content.includes("canal-teste-del")) confirmChannel = "canal-teste-del";
+  if (opts.yes) opts.yes();
+};
+
+const mockDelIcon = new MockElement("span");
+mockDelIcon.className = "channel-del-icon";
+mockDelIcon.dataset.channel = "canal-teste-del";
+mockDelIcon.parentElement = delTab;
+
+delTab.listeners["click"][0]({
+  target: mockDelIcon,
+  preventDefault() {},
+  stopPropagation() {}
+});
+
+assert(confirmDialogOpen === true && confirmChannel === "canal-teste-del", "Clique no ícone de exclusão abriu confirmação e executou exclusão");
+Dialog.confirm = origConfirm;
+
+// TESTE 6c: Tecla Enter no modal de criação de canal
+console.log("\nTeste 6c: Submissão via tecla Enter no modal de criação de canal");
+let enterChannelCreated = false;
+const origCreate = ChannelManager.createChannel;
+ChannelManager.createChannel = async (name) => {
+  if (name === "canal-via-enter") enterChannelCreated = true;
+  return { success: true };
+};
+ChannelManager.showCreateChannelDialog();
+if (lastOpenedDialog && lastOpenedDialog.options.render) {
+  const mockDiv = new MockElement("div");
+  const mockInput = new MockElement("input");
+  mockInput.id = "new-channel-name-input";
+  mockInput.value = "canal-via-enter";
+  mockDiv.children.push(mockInput);
+  
+  const mockCreateBtn = new MockElement("button");
+  mockCreateBtn.className = "dialog-button create";
+  mockCreateBtn.click = () => { lastOpenedDialog.options.buttons.create.callback(mockDiv); };
+  mockDiv.children.push(mockCreateBtn);
+  
+  lastOpenedDialog.options.render(mockDiv);
+  mockInput.dispatchEvent({ type: "keydown", key: "Enter", preventDefault() {} });
+  assert(enterChannelCreated === true, "Pressionar tecla Enter no campo de texto submete e cria o canal diretamente");
+}
+ChannelManager.createChannel = origCreate;
+
+// TESTE 6d: Criação otimista de canal por jogador (visível na sessão)
+console.log("\nTeste 6d: Criação otimista de canal por jogador");
+game.user.isGM = false;
+await ChannelManager.createChannel("plano-secreto-jogadores");
+assert(ChannelManager.getChannels().includes("plano-secreto-jogadores"), "Jogador tem canal adicionado imediatamente via localChannels de forma otimista");
+game.user.isGM = true;
+
 // TESTE 7: Filtragem de Mensagens e Auto-Tagging de Mensagens Existentes
 console.log("\nTeste 7: Filtragem e Auto-Tagging de mensagens no DOM");
+ChannelManager.setActiveChannel("off-topic");
 // Cria mensagens simuladas no mockChatLog
 const msgGeral = new MockElement("li");
 msgGeral.className = "chat-message message";
@@ -454,6 +524,12 @@ assert(processedMixed.includes('src="https://i.imgur.com/monster.png"'), "Imagem
 const alreadyImg = '<img src="icons/sword.png" />';
 assert(ImageHandler.processMessageContent(alreadyImg) === alreadyImg, "Mensagem que já possui imagem não sofre alteração duplicada");
 
+// 10d. URL envolta em tags HTML <p>...</p>
+const wrappedUrl = "<p>https://media.giphy.com/media/test/giphy.gif</p>";
+const processedWrapped = ImageHandler.processMessageContent(wrappedUrl);
+assert(processedWrapped.includes('class="discord-image-container"'), "URL envolta em <p> é convertida em container de imagem");
+assert(!processedWrapped.includes("<p></p>") && !processedWrapped.includes('<p class="discord-message-text"></p>'), "URL envolta em <p> não gera parágrafos vazios ou aninhamentos inválidos");
+
 // TESTE 11: Envio direto de Imagem via sendImageUrl
 console.log("\nTeste 11: Envio de URL via sendImageUrl");
 await ImageHandler.sendImageUrl("https://example.com/dragao.jpg", "geral");
@@ -472,6 +548,44 @@ assert(optimizedGif === gifBlob, "GIF animado mantido intacto sem perda de quadr
 console.log("\nTeste 13: Conversão de imagem para Base64 (fallback garantido)");
 const fakeFile = new Blob(["test-image-binary-data"], { type: "image/png" });
 fakeFile.name = "exemplo.png";
+
+// TESTE 14: Proteção de cards de sistema e itens em formatDomMessage
+console.log("\nTeste 14: Proteção de cards de sistema e itens em formatDomMessage");
+const normalCard = new MockElement("div");
+normalCard.className = "chat-message";
+const normalCardContent = new MockElement("div");
+normalCardContent.className = "message-content";
+const itemIcon = new MockElement("img");
+itemIcon.src = "icons/weapons/espada.png";
+normalCardContent.appendChild(itemIcon);
+normalCard.appendChild(normalCardContent);
+
+const mockMsgDocNotImage = {
+  getFlag(mod, key) { return false; }
+};
+
+ImageHandler.formatDomMessage(mockMsgDocNotImage, normalCard);
+assert(!itemIcon.classList.contains("discord-chat-img"), "Ícone de item de card de sistema NÃO foi alterado para imagem de chat");
+assert(normalCard.querySelector(".discord-image-container") === null, "Nenhum container Discord foi injetado em card comum");
+
+// TESTE 15: Preservação de speaker ao falar em personagem
+console.log("\nTeste 15: Preservação de speaker ao falar em personagem");
+const mockDocSpeaker = {
+  content: "Falando como Gandalf",
+  speaker: { actor: "actor-123", token: "token-456", alias: "Gandalf" },
+  updateSource(updates) { this.updates = updates; }
+};
+const mockCreateData = {
+  content: "Falando como Gandalf",
+  speaker: { actor: "actor-123", token: "token-456", alias: "Gandalf" }
+};
+const currentActive = ChannelManager.getActiveChannel();
+const updates = { "flags.custom-channels-chat.channel": currentActive };
+mockDocSpeaker.updateSource(updates);
+
+assert(mockDocSpeaker.speaker.actor === "actor-123", "speaker.actor preservado para fala de personagem");
+assert(mockDocSpeaker.speaker.token === "token-456", "speaker.token preservado para fala de personagem");
+assert(mockDocSpeaker.speaker.alias === "Gandalf", "speaker.alias preservado para fala de personagem");
 
 globalThis.FileReader = class {
   readAsDataURL(blob) {

@@ -7,6 +7,7 @@ export class ChannelManager {
   static MODULE_ID = "custom-channels-chat";
   static activeChannel = "geral";
   static unreadCounts = {};
+  static localChannels = new Set();
 
   /**
    * Retorna a lista de canais configurados no mundo
@@ -18,6 +19,13 @@ export class ChannelManager {
       .split(",")
       .map(c => c.trim().toLowerCase().replace(/\s+/g, "-"))
       .filter(c => c.length > 0);
+
+    // Inclui canais locais adicionados nesta sessão (otimista para jogadores)
+    for (const local of this.localChannels) {
+      if (!channels.includes(local)) {
+        channels.push(local);
+      }
+    }
 
     // Garante que os canais 'geral' e 'dados' sempre existam
     if (!channels.includes("geral")) {
@@ -83,6 +91,9 @@ export class ChannelManager {
       return { success: false, error: "exists" };
     }
 
+    // Adiciona localmente de forma imediata (visível instantaneamente para quem criou)
+    this.localChannels.add(cleanName);
+
     // Se o usuário atual for GM, atualiza a configuração global
     if (game.user?.isGM) {
       currentChannels.push(cleanName);
@@ -100,7 +111,7 @@ export class ChannelManager {
       ui.notifications?.info?.(`Solicitação para criar canal #${cleanName} enviada.`);
     }
 
-    // Define o canal novo como ativo imediatamente
+    // Define o canal novo como ativo imediatamente e atualiza a barra
     this.setActiveChannel(cleanName);
     this.renderBar(ui.chat, ui.chat?.element || document);
     return { success: true, channel: cleanName };
@@ -122,6 +133,7 @@ export class ChannelManager {
       return false;
     }
 
+    this.localChannels.delete(channelName);
     const channels = this.getChannels().filter(c => c !== channelName);
     await game.settings.set(this.MODULE_ID, "channelsList", channels.join(", "));
     ui.notifications?.info?.(`Canal #${channelName} excluído.`);
@@ -169,7 +181,21 @@ export class ChannelManager {
           label: "Cancelar"
         }
       },
-      default: "create"
+      default: "create",
+      render: (html) => {
+        const root = html instanceof HTMLElement ? html : html[0];
+        const input = root.querySelector("#new-channel-name-input");
+        if (input) {
+          input.focus?.();
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const btn = root.querySelector(".dialog-button.create");
+              if (btn) btn.click();
+            }
+          });
+        }
+      }
     }).render(true);
   }
 
@@ -214,8 +240,25 @@ export class ChannelManager {
       const canDelete = game.user?.isGM && ch !== "geral" && ch !== "dados";
       const delBtnHtml = canDelete ? `<span class="channel-del-icon" title="Excluir canal" data-channel="${ch}"><i class="fas fa-times"></i></span>` : "";
 
-      // Listener direto no botão como garantia adicional
+      // Renderiza conteúdo visível do botão
+      btn.innerHTML = `${icon} <span class="channel-name">${label}</span>${badgeHtml}${delBtnHtml}`;
+
+      // Listener no botão com tratamento prioritário de exclusão
       btn.addEventListener("click", (e) => {
+        const delIcon = e.target?.closest?.(".channel-del-icon");
+        if (delIcon) {
+          e.preventDefault?.();
+          e.stopPropagation?.();
+          const targetChannel = delIcon.dataset.channel || ch;
+          Dialog.confirm({
+            title: "Excluir Canal",
+            content: `<p>Tem certeza que deseja excluir o canal <strong>#${targetChannel}</strong>?</p>`,
+            yes: () => this.deleteChannel(targetChannel),
+            defaultYes: false
+          });
+          return;
+        }
+
         e.preventDefault?.();
         e.stopPropagation?.();
         this.setActiveChannel(ch);
@@ -367,7 +410,12 @@ export class ChannelManager {
         if (!badge) {
           badge = document.createElement("span");
           badge.className = "channel-unread-badge";
-          btn.appendChild(badge);
+          const delIcon = btn.querySelector(".channel-del-icon");
+          if (delIcon) {
+            btn.insertBefore(badge, delIcon);
+          } else {
+            btn.appendChild(badge);
+          }
         }
         badge.textContent = unread > 99 ? "99+" : unread;
       } else if (badge) {
@@ -387,14 +435,16 @@ export class ChannelManager {
       document.head.appendChild(filterStyle);
     }
 
+    const active = this.activeChannel;
+
     if (filterStyle) {
       // Regras CSS abrangentes cobrindo todas as variações do Foundry VTT (v12, v13, ApplicationV2)
       filterStyle.textContent = `
-        #chat-log .chat-message:not([data-channel="${this.activeChannel}"]),
-        #chat-log .message:not([data-channel="${this.activeChannel}"]),
-        #chat-log li[data-message-id]:not([data-channel="${this.activeChannel}"]),
-        .chat-log [data-message-id]:not([data-channel="${this.activeChannel}"]),
-        #chat [data-message-id]:not([data-channel="${this.activeChannel}"]) {
+        #chat-log .chat-message:not([data-channel="${active}"]),
+        #chat-log .message:not([data-channel="${active}"]),
+        #chat-log li[data-message-id]:not([data-channel="${active}"]),
+        .chat-log [data-message-id]:not([data-channel="${active}"]),
+        #chat [data-message-id]:not([data-channel="${active}"]) {
           display: none !important;
         }
         li.custom-channel-hidden,
@@ -404,26 +454,27 @@ export class ChannelManager {
       `;
     }
 
-    // Sincronização direta de classe e marcação em cada mensagem em passagem única
-    const messages = this.getMessageElements(document);
-    messages.forEach(el => {
-      if (!el.dataset.channel) {
-        const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
-        const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-        const isRoll = msgDoc?.isRoll || el.classList.contains("dice-roll") || el.querySelector?.(".dice-roll") !== null;
-        el.dataset.channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+    const chatLog = document.getElementById("chat-log") || document.querySelector?.(".chat-log");
+    if (chatLog) {
+      const messages = chatLog.children ? Array.from(chatLog.children) : this.getMessageElements(chatLog);
+      for (let i = 0; i < messages.length; i++) {
+        const el = messages[i];
+        if (!el.dataset) continue;
+        if (!el.dataset.channel) {
+          const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
+          const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+          const isRoll = msgDoc?.isRoll || el.classList?.contains?.("dice-roll") || (el.querySelector && el.querySelector(".dice-roll") !== null);
+          el.dataset.channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+        }
+        const channel = el.dataset.channel || "geral";
+        el.classList.toggle("custom-channel-hidden", channel !== active);
       }
-      const channel = el.dataset.channel || "geral";
-      el.classList.toggle("custom-channel-hidden", channel !== this.activeChannel);
-    });
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
 
     // Rola suavemente para o final do chat
     if (ui.chat && typeof ui.chat.scrollBottom === "function") {
       ui.chat.scrollBottom();
-    }
-    const chatLog = document.getElementById("chat-log") || document.querySelector(".chat-log");
-    if (chatLog) {
-      chatLog.scrollTop = chatLog.scrollHeight;
     }
   }
 

@@ -10,9 +10,9 @@ export class ImageHandler {
   static MODULE_ID = "custom-channels-chat";
 
   /**
-   * Expressão regular para identificar URLs diretas de imagem ou plataformas suportadas (Tenor, Giphy, Imgur)
+   * Expressão regular para identificar URLs diretas de imagem ou plataformas suportadas (Tenor, Giphy, Imgur, Discord)
    */
-  static MEDIA_URL_REGEX = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?[^\s<>"']*)?|https?:\/\/(?:www\.)?tenor\.com\/view\/[^\s<>"']+|https?:\/\/(?:media|c)\.tenor\.com\/[^\s<>"']+|https?:\/\/(?:www\.)?giphy\.com\/gifs\/[^\s<>"']+|https?:\/\/(?:media|i)\.giphy\.com\/media\/[^\s<>"']+|https?:\/\/(?:i\.)?imgur\.com\/[^\s<>"']+/i;
+  static MEDIA_URL_REGEX = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:\?[^\s<>"']*)?|https?:\/\/(?:www\.)?tenor\.com\/view\/[^\s<>"']+|https?:\/\/(?:media|c)\.tenor\.com\/[^\s<>"']+|https?:\/\/(?:www\.)?giphy\.com\/gifs\/[^\s<>"']+|https?:\/\/(?:media|i)\.giphy\.com\/media\/[^\s<>"']+|https?:\/\/(?:i\.)?imgur\.com\/[^\s<>"']+|https?:\/\/cdn\.discordapp\.com\/attachments\/[^\s<>"']+|https?:\/\/images-ext-\d+\.discordapp\.net\/external\/[^\s<>"']+/i;
 
   /**
    * Inicializa os listeners e a barra de ações de mídia no ChatLog
@@ -27,10 +27,10 @@ export class ImageHandler {
     const chatControls = root.querySelector("#chat-controls") || root.querySelector(".chat-controls");
     const chatForm = root.querySelector("#chat-form") || root.querySelector(".chat-form") || textarea?.closest("form");
 
-    // 1. Injeta a barra de ferramentas de mídia (Botão Imagem + Botão GIF/URL)
+    // 1. Injeta a barra de ferramentas de mídia logo acima da caixa de mensagem
     this.injectMediaToolbar(root, chatControls, chatForm, textarea);
 
-    // 2. Captura evento de Colar (Ctrl + V) tanto na caixa de texto quanto no painel do chat
+    // 2. Captura evento de Colar (Ctrl + V) na caixa de texto, no chat e globalmente
     this.setupPasteHandler(root, textarea);
 
     // 3. Captura evento de Arrastar e Soltar (Drag & Drop) de imagens
@@ -45,7 +45,8 @@ export class ImageHandler {
    */
   static injectMediaToolbar(root, chatControls, chatForm, textarea) {
     // Evita duplicações
-    if (root.querySelector(".custom-chat-media-toolbar")) return;
+    const existing = root.querySelector ? root.querySelector(".custom-chat-media-toolbar") : document.querySelector(".custom-chat-media-toolbar");
+    if (existing) return;
 
     const toolbar = document.createElement("div");
     toolbar.className = "custom-chat-media-toolbar";
@@ -95,13 +96,15 @@ export class ImageHandler {
     toolbar.appendChild(gifBtn);
     toolbar.appendChild(fileInput);
 
-    // Insere a toolbar em posição estratégica e visível
-    if (chatControls) {
-      chatControls.appendChild(toolbar);
-    } else if (textarea) {
+    // Posiciona a toolbar prioritariamente logo acima da caixa de texto
+    if (textarea) {
       textarea.before(toolbar);
     } else if (chatForm) {
       chatForm.prepend(toolbar);
+    } else if (chatControls) {
+      chatControls.after(toolbar);
+    } else if (root.appendChild) {
+      root.appendChild(toolbar);
     }
   }
 
@@ -109,39 +112,84 @@ export class ImageHandler {
    * Configura o listener de Ctrl+V (Paste) para imagens da área de transferência
    */
   static setupPasteHandler(root, textarea) {
+    const handlePaste = async (event) => {
+      const clipboard = event.clipboardData || window.clipboardData;
+      if (!clipboard) return;
+
+      // Extrai arquivo de imagem da área de transferência
+      let imageFile = null;
+      if (clipboard.files && clipboard.files.length > 0) {
+        for (const file of clipboard.files) {
+          if (file.type && file.type.startsWith("image/")) {
+            imageFile = file;
+            break;
+          }
+        }
+      }
+
+      if (!imageFile && clipboard.items && clipboard.items.length > 0) {
+        for (const item of clipboard.items) {
+          if (item.type && item.type.startsWith("image/")) {
+            imageFile = item.getAsFile();
+            if (imageFile) break;
+          }
+        }
+      }
+
+      if (imageFile) {
+        event.preventDefault();
+        event.stopPropagation();
+        await this.processAndSendImage(imageFile);
+        return;
+      }
+    };
+
     const targets = [textarea, root].filter(Boolean);
-
     targets.forEach(target => {
-      if (target.dataset.customPasteAttached) return;
-      target.dataset.customPasteAttached = "true";
+      if (target.dataset?.customPasteAttached) return;
+      if (target.dataset) target.dataset.customPasteAttached = "true";
+      target.addEventListener("paste", handlePaste);
+    });
 
-      target.addEventListener("paste", async (event) => {
+    // Handler global no document para garantir Ctrl+V quando a aba do chat estiver ativa
+    if (typeof document !== "undefined" && !document.body?.dataset?.customGlobalPasteAttached) {
+      if (document.body?.dataset) document.body.dataset.customGlobalPasteAttached = "true";
+      document.addEventListener("paste", async (event) => {
+        const chatElement = document.getElementById("chat");
+        const isChatActive = chatElement && (chatElement.classList.contains("active") || chatElement.offsetParent !== null);
+        if (!isChatActive) return;
+
+        // Se o evento foi no textarea ou alvos diretos, o listener local já executa
+        if (event.target === textarea || targets.includes(event.target)) return;
+
         const clipboard = event.clipboardData || window.clipboardData;
         if (!clipboard) return;
 
-        // Verifica se há arquivos de imagem na área de transferência (prints, screenshots, cópia direta)
-        if (clipboard.items && clipboard.items.length > 0) {
-          for (const item of clipboard.items) {
-            if (item.type && item.type.startsWith("image/")) {
-              event.preventDefault();
-              event.stopPropagation();
-              const file = item.getAsFile();
-              if (file) {
-                await this.processAndSendImage(file);
-              }
-              return;
+        let imageFile = null;
+        if (clipboard.files && clipboard.files.length > 0) {
+          for (const f of clipboard.files) {
+            if (f.type && f.type.startsWith("image/")) {
+              imageFile = f;
+              break;
+            }
+          }
+        }
+        if (!imageFile && clipboard.items) {
+          for (const it of clipboard.items) {
+            if (it.type && it.type.startsWith("image/")) {
+              imageFile = it.getAsFile();
+              if (imageFile) break;
             }
           }
         }
 
-        // Se o usuário colou texto, verifica se é um link direto de imagem/GIF
-        const pastedText = clipboard.getData("text/plain")?.trim();
-        if (pastedText && this.isMediaUrl(pastedText) && target === textarea) {
-          // Se for uma URL pura de imagem, permite o fluxo normal (será tratada e embutida ao enviar)
-          console.log("custom-channels-chat | Link de mídia detectado no paste:", pastedText);
+        if (imageFile) {
+          event.preventDefault();
+          event.stopPropagation();
+          await this.processAndSendImage(imageFile);
         }
       });
-    });
+    }
   }
 
   /**
@@ -211,13 +259,13 @@ export class ImageHandler {
           Enviando para o canal: <span style="color: #5865f2; font-weight: 600;">#${activeChannel}</span>
         </div>
         <div style="margin-bottom: 8px;">
-          <input type="url" id="custom-image-url-field" placeholder="Cole o link da imagem ou GIF (Tenor, Giphy, .png, .gif)..." autofocus style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: #fff; font-size: 13px;" />
+          <input type="url" id="custom-image-url-field" placeholder="Cole o link da imagem ou GIF (Tenor, Giphy, .png, .gif)..." autofocus style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: #fff; font-size: 13px; box-sizing: border-box;" />
         </div>
         <div id="custom-image-preview-container" style="display: none; text-align: center; max-height: 220px; overflow: hidden; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 6px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.08);">
           <img id="custom-image-preview-element" style="max-height: 200px; max-width: 100%; border-radius: 4px; object-fit: contain;" alt="Pré-visualização" />
         </div>
-        <p style="font-size: 11px; color: #80848e; margin: 0;">
-          <i class="fas fa-info-circle"></i> Suporta links diretos (.png, .jpg, .gif, .webp), Tenor e Giphy.
+        <p id="custom-image-modal-hint" style="font-size: 11px; color: #80848e; margin: 0;">
+          <i class="fas fa-info-circle"></i> Suporta links diretos (.png, .jpg, .gif, .webp), Giphy, Imgur e Tenor.
         </p>
       </div>
     `;
@@ -249,17 +297,40 @@ export class ImageHandler {
         const input = root.querySelector("#custom-image-url-field");
         const previewContainer = root.querySelector("#custom-image-preview-container");
         const previewImg = root.querySelector("#custom-image-preview-element");
+        const hint = root.querySelector("#custom-image-modal-hint");
 
         if (!input || !previewContainer || !previewImg) return;
 
         const updatePreview = () => {
           const rawUrl = input.value.trim();
-          if (rawUrl && ImageHandler.isMediaUrl(rawUrl)) {
+          if (!rawUrl) {
+            previewContainer.style.display = "none";
+            if (hint) hint.innerHTML = '<i class="fas fa-info-circle"></i> Suporta links diretos (.png, .jpg, .gif, .webp), Giphy, Imgur e Tenor.';
+            return;
+          }
+
+          if (rawUrl.includes("tenor.com/view/")) {
+            previewContainer.style.display = "none";
+            if (hint) {
+              hint.innerHTML = '<span style="color: #faa61a;"><i class="fas fa-exclamation-circle"></i> Dica do Tenor: clique com o botão direito no GIF e escolha "Copiar endereço da imagem" para o link direto (.gif).</span>';
+            }
+            return;
+          }
+
+          if (ImageHandler.isMediaUrl(rawUrl)) {
             const resolved = ImageHandler.resolveMediaUrl(rawUrl);
+            previewImg.onload = () => {
+              previewContainer.style.display = "block";
+              if (hint) hint.innerHTML = '<span style="color: #57f287;"><i class="fas fa-check-circle"></i> Imagem pronta para envio!</span>';
+            };
+            previewImg.onerror = () => {
+              previewContainer.style.display = "none";
+              if (hint) hint.innerHTML = '<span style="color: #f23f43;"><i class="fas fa-times-circle"></i> Não foi possível carregar a pré-visualização. Certifique-se de que é um link direto de imagem.</span>';
+            };
             previewImg.src = resolved;
-            previewContainer.style.display = "block";
           } else {
             previewContainer.style.display = "none";
+            if (hint) hint.innerHTML = '<span style="color: #f23f43;"><i class="fas fa-times-circle"></i> URL de imagem inválida ou não reconhecida.</span>';
           }
         };
 
@@ -287,13 +358,15 @@ export class ImageHandler {
     const resolvedUrl = this.resolveMediaUrl(rawUrl.trim());
     const targetChannel = channel || ChannelManager.getActiveChannel();
 
+    const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
+
     await ChatMessage.create({
       content: `
         <div class="discord-image-container">
           <img src="${resolvedUrl}" class="discord-chat-img" alt="GIF ou Imagem" loading="lazy" />
         </div>
       `,
-      speaker: { alias: game.user?.name || "Usuário" },
+      speaker: speaker,
       flags: {
         "custom-channels-chat": {
           channel: targetChannel,
@@ -316,13 +389,13 @@ export class ImageHandler {
   }
 
   /**
-   * Resolve e formata links de plataformas populares (Giphy, Tenor, etc.) para URLs de mídia utilizáveis
+   * Resolve e formata links de plataformas populares (Giphy, Tenor, Imgur, etc.) para URLs de mídia utilizáveis
    * @param {string} url 
    * @returns {string}
    */
   static resolveMediaUrl(url) {
     if (!url) return "";
-    let cleanUrl = url.trim();
+    let cleanUrl = url.trim().replace(/<\/?[^>]+(>|$)/g, "").trim();
 
     // Resolução para links de página do Giphy (ex: https://giphy.com/gifs/cat-cute-3oKIPnAiaMCws8nOsE)
     const giphyMatch = cleanUrl.match(/giphy\.com\/gifs\/(?:.*-)?([a-zA-Z0-9]+)/i);
@@ -331,12 +404,10 @@ export class ImageHandler {
       return `https://media.giphy.com/media/${giphyId}/giphy.gif`;
     }
 
-    // Links do Imgur sem extensão
-    if (/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)$/i.test(cleanUrl)) {
-      const match = cleanUrl.match(/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)$/i);
-      if (match && match[1]) {
-        return `https://i.imgur.com/${match[1]}.png`;
-      }
+    // Links do Imgur sem extensão ou links de galeria
+    const imgurMatch = cleanUrl.match(/^https?:\/\/(?:i\.)?imgur\.com\/(?:gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z]+)?$/i);
+    if (imgurMatch && imgurMatch[1] && !cleanUrl.includes(".")) {
+      return `https://i.imgur.com/${imgurMatch[1]}.png`;
     }
 
     return cleanUrl;
@@ -352,14 +423,17 @@ export class ImageHandler {
 
     const trimmed = rawContent.trim();
 
-    // Se já estiver embutido com tag de imagem, não duplica
+    // Se já estiver embutido com tag de imagem ou container de imagem, não duplica
     if (trimmed.includes("discord-image-container") || trimmed.includes("<img")) {
       return rawContent;
     }
 
+    // Remove tags HTML básicas envoltórias (<p>...</p>) para inspeção de URL pura
+    const strippedContent = trimmed.replace(/<\/?[^>]+(>|$)/g, "").trim();
+
     // 1. Caso a mensagem seja EXATAMENTE uma URL de imagem ou GIF
-    if (this.isMediaUrl(trimmed) && !trimmed.includes(" ")) {
-      const resolved = this.resolveMediaUrl(trimmed);
+    if (this.isMediaUrl(strippedContent) && !strippedContent.includes(" ")) {
+      const resolved = this.resolveMediaUrl(strippedContent);
       return `
         <div class="discord-image-container">
           <img src="${resolved}" class="discord-chat-img" alt="Imagem enviada" loading="lazy" />
@@ -373,9 +447,10 @@ export class ImageHandler {
       const mediaUrl = match[0];
       const resolved = this.resolveMediaUrl(mediaUrl);
 
-      // Remove a URL crua do texto ou substitui por link formatado
+      // Remove a URL e extrai texto limpo
       const textWithoutUrl = trimmed.replace(mediaUrl, "").trim();
-      const textPart = textWithoutUrl ? `<p class="discord-message-text">${textWithoutUrl}</p>` : "";
+      const cleanText = textWithoutUrl.replace(/<\/?[^>]+(>|$)/g, "").trim();
+      const textPart = cleanText ? `<p class="discord-message-text">${cleanText}</p>` : "";
 
       return `
         ${textPart}
@@ -396,10 +471,15 @@ export class ImageHandler {
   static formatDomMessage(messageDoc, el) {
     if (!el) return;
 
+    // Apenas formata se for expressamente uma mensagem de imagem do módulo
+    const isImageFlag = messageDoc?.getFlag?.(this.MODULE_ID, "isImage");
+    const hasContainer = el.querySelector(".discord-image-container");
+    if (!isImageFlag && !hasContainer) return;
+
     const contentEl = el.querySelector(".message-content");
     if (!contentEl) return;
 
-    // Se já possui imagem, garante classe
+    // Garante classe discord-chat-img e container na imagem
     const existingImg = contentEl.querySelector("img");
     if (existingImg && !existingImg.classList.contains("discord-chat-img")) {
       existingImg.classList.add("discord-chat-img");
@@ -427,9 +507,10 @@ export class ImageHandler {
 
     let imageSrc = null;
 
-    // Tenta upload no servidor do Foundry
+    // Tenta upload no servidor do Foundry se o usuário tiver permissão
     try {
-      if (typeof FilePicker !== "undefined" && game.world?.id) {
+      const hasUploadPerm = game.user?.isGM || (typeof game.user?.can === "function" && game.user.can("FILES_UPLOAD"));
+      if (hasUploadPerm && typeof FilePicker !== "undefined" && game.world?.id) {
         const uploadDir = `worlds/${game.world.id}/chat-uploads`;
         try {
           await FilePicker.createDirectory("data", uploadDir);
@@ -446,7 +527,7 @@ export class ImageHandler {
       console.warn("custom-channels-chat | Falha no upload para o servidor. Usando fallback Base64.", uploadErr);
     }
 
-    // Fallback: Converte o arquivo otimizado para Base64 se o upload no servidor falhar
+    // Fallback: Converte o arquivo otimizado para Base64 se o upload no servidor falhar ou não tiver permissão
     if (!imageSrc) {
       imageSrc = await this.fileToBase64(optimizedFile);
     }
@@ -457,6 +538,7 @@ export class ImageHandler {
     }
 
     const currentChannel = ChannelManager.getActiveChannel();
+    const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
 
     // Cria a mensagem no chat com a imagem
     await ChatMessage.create({
@@ -465,7 +547,7 @@ export class ImageHandler {
           <img src="${imageSrc}" class="discord-chat-img" alt="Imagem enviada" loading="lazy" />
         </div>
       `,
-      speaker: { alias: game.user?.name || "Usuário" },
+      speaker: speaker,
       flags: {
         "custom-channels-chat": {
           channel: currentChannel,

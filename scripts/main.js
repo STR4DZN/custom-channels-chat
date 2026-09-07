@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.1.0...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.2.0...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -54,6 +54,11 @@ Hooks.once("ready", () => {
   if (game.socket) {
     game.socket.on(`module.${MODULE_ID}`, async (data) => {
       if (!game.user?.isGM) return;
+
+      // Se houver múltiplos GMs conectados, apenas o primeiro ativo executa a alteração
+      const activeGMs = game.users ? Array.from(game.users.values()).filter(u => u.isGM && u.active) : [];
+      const isPrimaryGM = activeGMs.length > 0 ? activeGMs[0].id === game.user.id : true;
+      if (!isPrimaryGM) return;
 
       if (data?.action === "createChannel" && data.channelName) {
         const cleanName = String(data.channelName).trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-_]/g, "");
@@ -101,14 +106,12 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
     const processedContent = ImageHandler.processMessageContent(rawContent);
 
     const updates = {
-      "flags.custom-channels-chat.channel": channelToSet,
-      "speaker.alias": game.user?.name || "Usuário",
-      "speaker.actor": null,
-      "speaker.token": null
+      "flags.custom-channels-chat.channel": channelToSet
     };
 
     if (processedContent !== rawContent) {
       updates.content = processedContent;
+      createData.content = processedContent;
       updates["flags.custom-channels-chat.isImage"] = true;
     }
 
