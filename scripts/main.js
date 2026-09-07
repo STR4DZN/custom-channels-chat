@@ -96,15 +96,8 @@ Hooks.on("renderChatMessage", (messageDoc, html, data) => {
   const isRoll = messageDoc.isRoll || el.classList.contains("dice-roll");
   const channel = messageDoc.getFlag(MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
   
+  // O atributo data-channel aciona automaticamente a regra CSS O(1) para visibilidade instantânea
   el.dataset.channel = channel;
-
-  // Filtra visibilidade de acordo com o canal atualmente aberto
-  const currentActive = ChannelManager.getActiveChannel();
-  if (channel !== currentActive) {
-    el.style.display = "none";
-  } else {
-    el.style.display = "";
-  }
 
   // Aplica avatar e estilo Discord em mensagens de conversa
   ChannelManager.formatDiscordMessage(messageDoc, el);

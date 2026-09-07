@@ -144,23 +144,24 @@ export class ChannelManager {
   }
 
   /**
-   * Filtra todas as mensagens no elemento #chat-log exibindo apenas as do canal ativo
+   * Atualiza a regra CSS de alta performance O(1) para exibir apenas as mensagens do canal ativo
    */
   static filterMessages() {
-    const chatLog = document.getElementById("chat-log");
-    if (!chatLog) return;
+    let filterStyle = document.getElementById("custom-channels-filter-style");
+    if (!filterStyle) {
+      filterStyle = document.createElement("style");
+      filterStyle.id = "custom-channels-filter-style";
+      document.head.appendChild(filterStyle);
+    }
 
-    const messages = chatLog.querySelectorAll(".message");
-    messages.forEach(msg => {
-      const msgChannel = msg.dataset.channel || (msg.classList.contains("dice-roll") ? "dados" : "geral");
-      if (msgChannel === this.activeChannel) {
-        msg.style.display = "";
-      } else {
-        msg.style.display = "none";
+    // A regra CSS oculta instantaneamente qualquer mensagem fora do canal ativo no motor nativo C++ do navegador
+    filterStyle.textContent = `
+      #chat-log .message:not([data-channel="${this.activeChannel}"]) {
+        display: none !important;
       }
-    });
+    `;
 
-    // Rola para o final do chat
+    // Rola suavemente para o final do chat
     if (ui.chat && typeof ui.chat.scrollBottom === "function") {
       ui.chat.scrollBottom();
     }

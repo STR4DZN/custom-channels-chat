@@ -100,7 +100,10 @@ export class ImageHandler {
    * @param {File} file 
    */
   static async processAndSendImage(file) {
-    ui.notifications.info("Enviando imagem para o chat...");
+    ui.notifications.info("Processando imagem...");
+
+    // Otimiza e comprime imagens pesadas no cliente antes do envio
+    const optimizedFile = await this.optimizeImage(file);
 
     let imageSrc = null;
 
@@ -113,7 +116,7 @@ export class ImageHandler {
         // Diretório já pode existir
       }
 
-      const response = await FilePicker.upload("data", uploadDir, file, {}, { notify: false });
+      const response = await FilePicker.upload("data", uploadDir, optimizedFile, {}, { notify: false });
       if (response && response.path) {
         imageSrc = response.path;
       }
@@ -163,6 +166,84 @@ export class ImageHandler {
       reader.onload = () => resolve(reader.result);
       reader.onerror = (err) => reject(err);
       reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Redimensiona e comprime imagens muito pesadas no cliente antes do upload
+   * @param {File} file 
+   * @param {number} maxWidth 
+   * @param {number} maxHeight 
+   * @param {number} quality 
+   * @returns {Promise<File>}
+   */
+  static async optimizeImage(file, maxWidth = 1600, maxHeight = 1600, quality = 0.85) {
+    // Se não for imagem ou for menor que 300KB, mantém intacto
+    if (!file.type || !file.type.startsWith("image/") || file.size < 300 * 1024) {
+      return file;
+    }
+
+    // Se o ambiente não possuir suporte a Image / Canvas (ex: headless), retorna arquivo original
+    if (typeof Image === "undefined" || typeof document === "undefined") {
+      return file;
+    }
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let width = img.width;
+        let height = img.height;
+
+        // Se já está dentro das dimensões ideais e tamanho moderado
+        if (width <= maxWidth && height <= maxHeight && file.size < 600 * 1024) {
+          return resolve(file);
+        }
+
+        // Calcula novas dimensões mantendo o aspect ratio
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(file);
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              const newName = file.name ? file.name.replace(/\.[^.]+$/, ".webp") : "chat-image.webp";
+              const optimized = new File([blob], newName, {
+                type: "image/webp",
+                lastModified: Date.now()
+              });
+              resolve(optimized);
+            } else {
+              resolve(file);
+            }
+          },
+          "image/webp",
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+
+      img.src = url;
     });
   }
 }
