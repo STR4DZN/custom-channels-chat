@@ -1,4 +1,4 @@
-# Custom Channels Chat (Foundry VTT v13)
+# Custom Channels Chat (Foundry VTT v13 e v12)
 
 Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiência de bate-papo estilo Discord diretamente para a barra lateral do chat, sem misturar ou quebrar as rolagens de dados e mecânicas da mesa.
 
@@ -7,23 +7,28 @@ Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiên
 ## 🚀 Principais Funcionalidades
 
 1. **Canais e Abas no Chat (#geral, #off-topic, #dados):**
-   - Cria uma barra de canais estilizada no topo da aba de chat.
-   - O Mestre pode personalizar os nomes dos canais nas configurações do módulo.
-   - Filtro instantâneo das mensagens exibidas com alternância de abas.
+   - Cria uma barra de canais estilizada no topo da aba de chat com alternância rápida e instantânea.
+   - **Criar novos chats diretamente pela UI:** botão `+` na barra de canais para criar canais instantaneamente sem precisar acessar configurações do mundo.
+   - **Gerenciar/Excluir canais:** o Mestre pode excluir canais criados (com proteção automática para os canais `#geral` e `#dados`).
+   - Sincronização em tempo real via Sockets e World Settings entre Mestre e Jogadores.
    - Badge indicador de novas mensagens não lidas nos outros canais.
 
 2. **Isolamento e Preservação de Rolagens de Dados:**
    - Todas as rolagens de dados (feitas no chat com `/r`, pelas fichas de personagem ou por macros e outros módulos) são **roteadas automaticamente para a aba `#dados`**.
    - As abas de conversa ficam limpas para interpretação e bate-papo, sem perder o histórico nem interferir em módulos como *Dice So Nice* (dados 3D) ou sistemas de regras (D&D 5e, PF2e, Tormenta20, etc.).
 
-3. **Envio Direto de Imagens (Ctrl+V e Anexo):**
-   - **Colar da área de transferência:** tire um print e pressione `Ctrl+V` na caixa de texto do chat para enviar a imagem imediatamente.
-   - **Botão de anexo:** ícone de clipe de papel para escolher imagens do computador.
-   - **Upload seguro no servidor:** as imagens são salvas em `[Data]/worlds/<seu-mundo>/chat-uploads/` com fallback automático para Base64 caso o usuário não tenha permissões de gravação de arquivos.
+3. **Área Dedicada de Mídia (Imagens, GIFs e Links):**
+   - **Barra de Ferramentas de Mídia:** botões dedicados `Imagem` e `GIF / URL` visíveis no painel de envio do chat.
+   - **Modal com Live Preview:** ao clicar em `GIF / URL`, digite ou cole qualquer link e veja a imagem renderizar em tempo real antes de enviar.
+   - **Incorporação Automática de Links:** envie links de imagens diretas (`.png`, `.jpg`, `.gif`, `.webp`), Tenor ou Giphy no chat e eles são convertidos automaticamente em cards visuais.
+   - **Colar da área de transferência (Ctrl+V):** tire um print ou copie uma imagem e pressione `Ctrl+V` em qualquer lugar do chat para enviar.
+   - **Arrastar e Soltar (Drag & Drop):** arraste imagens do seu computador diretamente para a caixa de chat.
+   - **Upload seguro no servidor:** as imagens são salvas em `[Data]/worlds/<seu-mundo>/chat-uploads/` com fallback automático em Base64 otimizado.
    - **Visualizador Ampliado (Lightbox):** clique em qualquer imagem no chat para abri-la em tela cheia via `ImagePopout` nativo do Foundry.
 
 4. **Identidade Real do Usuário (Estilo Discord):**
    - Conversas de texto usam o avatar e o nome da conta do jogador, garantindo uma conversa fluida sem alterar o token selecionado no mapa.
+   - Compatibilidade completa com Foundry VTT v13 (ApplicationV2) e v12.
 
 ---
 

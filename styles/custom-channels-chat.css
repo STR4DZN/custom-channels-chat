@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13
+   Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13 e v12
    ========================================================================== */
 
 /* Barra de Canais no Topo do Chat */
@@ -7,35 +7,41 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  background: rgba(18, 19, 22, 0.85);
+  gap: 5px;
+  background: rgba(18, 19, 22, 0.92);
   padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px 4px 0 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
-  margin-bottom: 4px;
-  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  margin-bottom: 6px;
+  position: relative !important;
+  z-index: 100 !important;
+  flex-shrink: 0;
+  pointer-events: auto !important;
 }
 
 /* Botões / Abas de Canal */
 .custom-channel-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 4px;
   color: #949ba4;
   font-size: 11px;
   font-weight: 500;
   padding: 4px 8px;
-  cursor: pointer;
+  cursor: pointer !important;
   transition: all 0.15s ease-in-out;
   line-height: 1;
+  user-select: none;
+  pointer-events: auto !important;
+  position: relative;
 }
 
 .custom-channel-tab:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.13);
   color: #dbdee1;
 }
 
@@ -45,16 +51,66 @@
   color: #ffffff !important;
   border-color: transparent;
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(88, 101, 242, 0.4);
+  box-shadow: 0 1px 4px rgba(88, 101, 242, 0.4);
 }
 
 .custom-channel-tab .channel-hash {
   color: #80848e;
   font-weight: 700;
+  pointer-events: none;
 }
 
 .custom-channel-tab.active .channel-hash {
   color: #ffffff;
+}
+
+.custom-channel-tab .channel-name {
+  pointer-events: none;
+}
+
+/* Ícone de Exclusão de Canal (Para o Mestre) */
+.custom-channel-tab .channel-del-icon {
+  margin-left: 4px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-size: 9px;
+  color: #949ba4;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+
+.custom-channel-tab .channel-del-icon:hover {
+  opacity: 1;
+  color: #ffffff;
+  background: #f23f43;
+}
+
+/* Botão de Adicionar Canal (+) */
+.custom-channel-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #949ba4;
+  font-size: 10px;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out;
+  pointer-events: auto !important;
+  padding: 0;
+  margin-left: 2px;
+}
+
+.custom-channel-add-btn:hover {
+  background: #5865f2;
+  border-color: transparent;
+  color: #ffffff;
+  transform: scale(1.06);
 }
 
 /* Badge de Mensagens Não Lidas */
@@ -68,23 +124,52 @@
   margin-left: 2px;
   line-height: 1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
-/* Botão de Anexo de Arquivo / Imagem */
-.custom-chat-attach-btn {
-  background: transparent;
-  border: none;
-  color: #949ba4;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 4px 8px;
+/* Barra de Ferramentas de Mídia (Botões Imagem e GIF/URL) */
+.custom-chat-media-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin: 4px 0 6px 0;
+  background: rgba(18, 19, 22, 0.6);
   border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
-.custom-chat-attach-btn:hover {
-  color: #5865f2;
-  background: rgba(255, 255, 255, 0.08);
+.custom-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #949ba4;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  line-height: 1.2;
+}
+
+.custom-chat-btn i {
+  font-size: 11px;
+}
+
+.custom-chat-btn:hover {
+  background: rgba(88, 101, 242, 0.2);
+  color: #ffffff;
+  border-color: #5865f2;
+}
+
+/* Efeito Drag & Drop no Chat */
+.custom-chat-dragover {
+  outline: 2px dashed #5865f2 !important;
+  outline-offset: -2px;
+  background: rgba(88, 101, 242, 0.1) !important;
 }
 
 /* Estilo de Imagens Enviadas */
@@ -95,15 +180,16 @@
   max-width: 100%;
   display: inline-block;
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .discord-chat-img {
   display: block;
   max-width: 100%;
-  max-height: 260px;
+  max-height: 280px;
   border-radius: 6px;
   cursor: zoom-in;
+  object-fit: contain;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
@@ -112,15 +198,28 @@
   transform: scale(1.01);
 }
 
+.discord-message-text {
+  margin: 0 0 4px 0;
+  color: #dbdee1;
+  word-break: break-word;
+}
+
+/* Ocultação de Mensagens Fora do Canal Ativo */
+.custom-channel-hidden,
+li.custom-channel-hidden {
+  display: none !important;
+}
+
 /* Customização dos Cards de Mensagem de Conversa */
-.message.discord-styled-message {
-  background: rgba(26, 27, 30, 0.75) !important;
-  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+.message.discord-styled-message,
+.chat-message.discord-styled-message {
+  background: rgba(26, 27, 30, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
   border-left: 3px solid #5865f2 !important;
   border-radius: 6px !important;
   margin: 6px 0 !important;
   padding: 8px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Avatar do Usuário */
@@ -131,7 +230,7 @@
   overflow: hidden;
   flex-shrink: 0;
   margin-right: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .discord-avatar {

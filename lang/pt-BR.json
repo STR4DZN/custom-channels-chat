@@ -5,7 +5,21 @@
   "CUSTOM_CHANNELS_CHAT.Settings.AutoRouteRolls.Hint": "Envia automaticamente todas as rolagens de dados para a aba #dados.",
   "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Name": "Estilo Visual Discord",
   "CUSTOM_CHANNELS_CHAT.Settings.EnableDiscordStyle.Hint": "Aplica avatar do usuário e layout limpo nas mensagens de conversa.",
-  "CUSTOM_CHANNELS_CHAT.Notifications.UploadingImage": "Enviando imagem para o chat...",
+  "CUSTOM_CHANNELS_CHAT.Buttons.AttachImage": "Imagem",
+  "CUSTOM_CHANNELS_CHAT.Buttons.SendGif": "GIF / URL",
+  "CUSTOM_CHANNELS_CHAT.Buttons.AddChannel": "Criar Novo Canal",
+  "CUSTOM_CHANNELS_CHAT.Modals.CreateChannelTitle": "Criar Novo Canal",
+  "CUSTOM_CHANNELS_CHAT.Modals.CreateChannelPrompt": "Digite o nome do novo canal de texto:",
+  "CUSTOM_CHANNELS_CHAT.Modals.CreateChannelPlaceholder": "ex: rumores, combate, taverna",
+  "CUSTOM_CHANNELS_CHAT.Modals.SendImageTitle": "Enviar Imagem ou GIF",
+  "CUSTOM_CHANNELS_CHAT.Modals.SendImagePlaceholder": "Cole o link da imagem ou GIF (Tenor, Giphy, .png, .gif)...",
+  "CUSTOM_CHANNELS_CHAT.Modals.Preview": "Pré-visualização",
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadingImage": "Processando imagem...",
   "CUSTOM_CHANNELS_CHAT.Notifications.UploadSuccess": "Imagem enviada com sucesso!",
-  "CUSTOM_CHANNELS_CHAT.Notifications.UploadError": "Não foi possível processar a imagem selecionada."
+  "CUSTOM_CHANNELS_CHAT.Notifications.UploadError": "Não foi possível processar a imagem selecionada.",
+  "CUSTOM_CHANNELS_CHAT.Notifications.ChannelCreated": "Canal criado com sucesso!",
+  "CUSTOM_CHANNELS_CHAT.Notifications.ChannelExists": "Este canal já existe!",
+  "CUSTOM_CHANNELS_CHAT.Notifications.ChannelInvalid": "Nome de canal inválido.",
+  "CUSTOM_CHANNELS_CHAT.Notifications.ChannelDeleted": "Canal excluído com sucesso.",
+  "CUSTOM_CHANNELS_CHAT.Notifications.ChannelProtected": "Os canais #geral e #dados não podem ser excluídos."
 }
