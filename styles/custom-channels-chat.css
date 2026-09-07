@@ -2,19 +2,27 @@
    Custom Channels Chat - Estilo Visual Discord para Foundry VTT v13 e v12
    ========================================================================== */
 
-/* Container do Chat (Garante layout fixo flexível e previne rolagem indevida do painel pai) */
-#chat,
+/* Container do Chat (Garante layout fixo flexível e previne rolagem indevida do painel pai apenas quando ativo) */
+#chat.active,
+#sidebar .tab[data-tab="chat"].active,
+#sidebar section#chat.active,
+section#chat.sidebar-tab.active,
 #chat-popout,
-.chat-popout .window-content,
-#sidebar .tab[data-tab="chat"],
-#sidebar section#chat,
-section#chat.sidebar-tab {
+.chat-popout .window-content {
   display: flex !important;
   flex-direction: column !important;
   height: 100% !important;
   max-height: 100% !important;
   overflow: hidden !important;
   contain: paint;
+}
+
+/* Garante que o painel de chat fique estritamente oculto quando outra aba da sidebar estiver selecionada */
+#sidebar .tab[data-tab="chat"]:not(.active),
+#sidebar section#chat:not(.active),
+section#chat.sidebar-tab:not(.active),
+#chat:not(.active):not(#chat-popout):not(.chat-popout) {
+  display: none !important;
 }
 
 /* Área de Rolagem das Mensagens */

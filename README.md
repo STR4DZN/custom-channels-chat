@@ -13,9 +13,10 @@ Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiên
    - Sincronização em tempo real via Sockets e World Settings entre Mestre e Jogadores.
    - Badge indicador de novas mensagens não lidas nos outros canais.
 
-2. **Isolamento e Preservação de Rolagens de Dados:**
-   - Todas as rolagens de dados (feitas no chat com `/r`, pelas fichas de personagem ou por macros e outros módulos) são **roteadas automaticamente para a aba `#dados`**.
-   - As abas de conversa ficam limpas para interpretação e bate-papo, sem perder o histórico nem interferir em módulos como *Dice So Nice* (dados 3D) ou sistemas de regras (D&D 5e, PF2e, Tormenta20, etc.).
+2. **Isolamento e Preservação de Rolagens de Dados e Dano:**
+   - Todas as rolagens de dados e cards de dano (sejam manuais com `/r`, pelas fichas de personagem, macros, ou de sistemas como D&D 5e, PF2e, Tormenta20 e módulos como Midi-QOL, Ready Set Roll e Better Rolls) são **roteadas automaticamente para a aba `#dados`**.
+   - Isolamento completo na sidebar: a aba do chat é estritamente ocultada ao navegar para Atores, Cenas, Itens ou qualquer outra aba, prevenindo qualquer sobreposição visual.
+   - As abas de conversa ficam limpas para interpretação e bate-papo, sem perder o histórico nem interferir em módulos como *Dice So Nice* (dados 3D) ou automações de dano.
 
 3. **Área Dedicada de Mídia (Imagens, GIFs e Links):**
    - **Barra de Ferramentas de Mídia:** botões dedicados `Imagem` e `GIF / URL` visíveis no painel de envio do chat.

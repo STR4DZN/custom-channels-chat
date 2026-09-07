@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.3.0...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.0...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -89,7 +89,7 @@ Hooks.on("renderChatLog", (app, html, data) => {
 Hooks.on("changeSidebarTab", (app) => {
   const tabName = app?.tabName || (app && app[0]?.dataset?.tab) || (typeof app === "string" ? app : null);
   const chatEl = document.getElementById("chat");
-  const isChatTab = tabName === "chat" || !tabName || (chatEl && chatEl.classList.contains("active"));
+  const isChatTab = tabName === "chat" || (!tabName && chatEl?.classList?.contains("active"));
 
   if (isChatTab && chatEl) {
     if (chatEl.scrollTop > 0) chatEl.scrollTop = 0;
@@ -151,22 +151,26 @@ Hooks.on("renderImagePopout", (app, html, data) => {
  * Hook disparado antes de qualquer mensagem ser gravada no banco
  */
 Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
-  const autoRoute = game.settings.get(MODULE_ID, "autoRouteRolls");
-  const isRoll = messageDoc.isRoll || (createData.rolls && createData.rolls.length > 0) || createData.type === CONST.CHAT_MESSAGE_TYPES?.ROLL;
+  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+  const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, createData);
 
-  if (isRoll && autoRoute) {
-    // Rolagens vão sempre para o canal de dados
+  if (isDiceOrDamage && autoRoute) {
+    // Rolagens e cards de dano vão sempre para o canal de dados
     messageDoc.updateSource({
       "flags.custom-channels-chat.channel": "dados"
     });
+    if (createData?.flags) {
+      createData.flags[MODULE_ID] = createData.flags[MODULE_ID] || {};
+      createData.flags[MODULE_ID].channel = "dados";
+    }
   } else {
     // Mensagens normais recebem o canal ativo no cliente do autor
     const activeChannel = ChannelManager.getActiveChannel();
-    const existingChannel = createData.flags?.[MODULE_ID]?.channel;
+    const existingChannel = createData?.flags?.[MODULE_ID]?.channel;
     const channelToSet = existingChannel || activeChannel;
 
     // Detecta e embuti URLs diretas de imagens/GIFs (Tenor, Giphy, direct links) no conteúdo
-    const rawContent = messageDoc.content || createData.content || "";
+    const rawContent = messageDoc.content || createData?.content || "";
     const processedContent = ImageHandler.processMessageContent(rawContent);
 
     const updates = {
@@ -175,11 +179,35 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
 
     if (processedContent !== rawContent) {
       updates.content = processedContent;
-      createData.content = processedContent;
+      if (createData) createData.content = processedContent;
       updates["flags.custom-channels-chat.isImage"] = true;
     }
 
     messageDoc.updateSource(updates);
+  }
+});
+
+/**
+ * Hook disparado antes de qualquer mensagem ser atualizada (ex: automação adicionando dano/rolagens ao card)
+ */
+Hooks.on("preUpdateChatMessage", (messageDoc, changes, options, userId) => {
+  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+  if (!autoRoute) return;
+
+  // Se a atualização contiver rolagem ou card de dano (ex: Midi-QOL, PF2e, D&D 5e, Tormenta20)
+  if (ChannelManager.isDiceOrDamage(messageDoc, changes)) {
+    const currentChannel = messageDoc?.getFlag?.(MODULE_ID, "channel") || changes?.flags?.[MODULE_ID]?.channel;
+    if (currentChannel !== "dados") {
+      changes.flags = changes.flags || {};
+      changes.flags[MODULE_ID] = changes.flags[MODULE_ID] || {};
+      changes.flags[MODULE_ID].channel = "dados";
+      changes[`flags.${MODULE_ID}.channel`] = "dados";
+      if (typeof messageDoc.updateSource === "function") {
+        messageDoc.updateSource({
+          [`flags.${MODULE_ID}.channel`]: "dados"
+        });
+      }
+    }
   }
 });
 
@@ -190,17 +218,32 @@ function handleChatMessageRender(messageDoc, html) {
   const el = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : null);
   if (!el) return;
 
-  const isRoll = messageDoc.isRoll || el.classList.contains("dice-roll") || el.querySelector?.(".dice-roll") !== null;
-  const channel = messageDoc.getFlag(MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+  const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, {}, el);
+
+  let channel;
+  if (autoRoute && isDiceOrDamage) {
+    // Para qualquer tipo de dado ou dano, força estritamente o canal 'dados'
+    channel = "dados";
+  } else {
+    channel = messageDoc?.getFlag?.(MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral");
+  }
   
   // Atributo data-channel para filtragem CSS O(1) e classe auxiliar
   el.dataset.channel = channel;
   const active = ChannelManager.getActiveChannel();
   el.classList.toggle("custom-channel-hidden", channel !== active);
 
-  // Aplica estilo Discord e imagem caso necessário
-  ChannelManager.formatDiscordMessage(messageDoc, el);
-  ImageHandler.formatDomMessage(messageDoc, el);
+  // Aplica estilo Discord e imagem apenas para mensagens normais de bate-papo
+  if (!isDiceOrDamage) {
+    ChannelManager.formatDiscordMessage(messageDoc, el);
+    ImageHandler.formatDomMessage(messageDoc, el);
+  } else {
+    // Garante que nenhum elemento de avatar Discord permaneça em card de rolagem/dano
+    const discordAvatar = el.querySelector(".discord-avatar-wrap");
+    if (discordAvatar) discordAvatar.remove();
+    el.classList.remove("discord-styled-message");
+  }
 }
 
 /**
@@ -221,8 +264,9 @@ Hooks.on("renderChatMessageHTML", (messageDoc, html, context) => {
  * Hook disparado quando uma nova mensagem é criada em tempo real
  */
 Hooks.on("createChatMessage", (messageDoc, options, userId) => {
-  const isRoll = messageDoc.isRoll;
-  const channel = messageDoc.getFlag(MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+  const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc);
+  const channel = (autoRoute && isDiceOrDamage) ? "dados" : (messageDoc?.getFlag?.(MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral"));
   const activeChannel = ChannelManager.getActiveChannel();
 
   if (channel !== activeChannel) {
@@ -231,5 +275,19 @@ Hooks.on("createChatMessage", (messageDoc, options, userId) => {
     if (ui.chat && typeof ui.chat.scrollBottom === "function") {
       ui.chat.scrollBottom();
     }
+  }
+});
+
+/**
+ * Hook disparado quando uma mensagem é atualizada em tempo real (ex: card que recebeu dano)
+ */
+Hooks.on("updateChatMessage", (messageDoc, changes, options, userId) => {
+  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+  const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, changes);
+  const channel = (autoRoute && isDiceOrDamage) ? "dados" : (messageDoc?.getFlag?.(MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral"));
+  const activeChannel = ChannelManager.getActiveChannel();
+
+  if (channel !== activeChannel && isDiceOrDamage) {
+    ChannelManager.incrementUnread(channel);
   }
 });

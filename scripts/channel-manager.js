@@ -10,6 +10,83 @@ export class ChannelManager {
   static localChannels = new Set();
 
   /**
+   * Detector abrangente para identificar se uma mensagem é uma rolagem de dados ou card de dano.
+   * Suporta sistemas como D&D 5e, PF2e, Tormenta20, módulos de automação (Midi-QOL, Ready Set Roll, Better Rolls)
+   * e inspeção avançada de conteúdo HTML e nós DOM.
+   * @param {ChatMessage|object} [messageDoc] 
+   * @param {object} [data] 
+   * @param {HTMLElement} [el] 
+   * @returns {boolean}
+   */
+  static isDiceOrDamage(messageDoc = {}, data = {}, el = null) {
+    // 1. Verificação direta de flags ou propriedades booleanas de rolagem
+    if (messageDoc?.isRoll || data?.isRoll) return true;
+
+    // Rolagens em coleções ou arrays (Foundry v10, v11, v12, v13)
+    const msgRolls = messageDoc?.rolls || messageDoc?._rolls;
+    if (msgRolls && (msgRolls.length > 0 || (typeof msgRolls.size === "number" && msgRolls.size > 0))) return true;
+
+    const dataRolls = data?.rolls || data?._rolls;
+    if (dataRolls && (dataRolls.length > 0 || (typeof dataRolls.size === "number" && dataRolls.size > 0))) return true;
+
+    // Tipos e estilos de mensagem CONST (ROLL)
+    if (typeof CONST !== "undefined") {
+      const rollType = CONST.CHAT_MESSAGE_TYPES?.ROLL;
+      if (rollType !== undefined && (messageDoc?.type === rollType || data?.type === rollType)) return true;
+
+      const rollStyle = CONST.CHAT_MESSAGE_STYLES?.ROLL;
+      if (rollStyle !== undefined && (messageDoc?.style === rollStyle || data?.style === rollStyle)) return true;
+    }
+    if (messageDoc?.type === 5 || data?.type === 5 || messageDoc?.style === 5 || data?.style === 5) return true;
+
+    // 2. Flags de sistemas e módulos de automação
+    const docFlags = messageDoc?.flags || {};
+    const dataFlags = data?.flags || {};
+    const flags = { ...docFlags, ...dataFlags };
+
+    // D&D 5e
+    if (flags.dnd5e) {
+      if (flags.dnd5e.roll || flags.dnd5e.damage || flags.dnd5e.damageRoll || flags.dnd5e.rollType === "damage") return true;
+      if (flags.dnd5e.type === "damage" || flags.dnd5e.type === "attack") return true;
+    }
+
+    // Pathfinder 2e
+    if (flags.pf2e) {
+      if (flags.pf2e.context || flags.pf2e.damage || flags.pf2e.target) return true;
+    }
+
+    // Midi-QOL
+    if (flags["midi-qol"]) return true;
+
+    // Ready Set Roll 5e
+    if (flags["ready-set-roll-5e"]) return true;
+
+    // Better Rolls 5e
+    if (flags["betterrolls5e"]) return true;
+
+    // Tormenta20 / T20
+    if (flags.tormenta20?.rollType || flags.t20?.rollType || flags.tormenta20?.dano || flags.t20?.dano) return true;
+
+    // 3. Inspeção de conteúdo HTML por padrões de rolagem ou dano
+    const content = data?.content || messageDoc?.content;
+    if (content && typeof content === "string") {
+      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|inline-roll|damage-roll|damage-card|data-damage|dnd5e-damage|data-roll|chat-damage-buttons|apply-damage|damage-apply|card-damage|target-damage|inline-dsn-hidden|data-dano|rolagem-dano|class=["'][^"']*\b(?:damage|dano)\b/i;
+      if (DAMAGE_DICE_REGEX.test(content)) return true;
+    }
+
+    // 4. Inspeção no elemento DOM renderizado (se fornecido)
+    if (el) {
+      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano")) return true;
+      if (typeof el.querySelector === "function") {
+        const rollEl = el.querySelector(".dice-roll, .dice-result, .dice-total, .dice-formula, .inline-roll, [data-damage], [data-roll], .damage-roll, .damage-card, .damage, .dnd5e-damage, .chat-damage-buttons, .apply-damage, [data-dano]");
+        if (rollEl !== null) return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Retorna a lista de canais configurados no mundo
    * @returns {string[]}
    */
@@ -411,13 +488,16 @@ export class ChannelManager {
    */
   static tagExistingMessages(root) {
     const messages = this.getMessageElements(root || document);
+    const autoRoute = game.settings?.get(this.MODULE_ID, "autoRouteRolls") ?? true;
     messages.forEach(msgEl => {
-      if (!msgEl.dataset.channel) {
-        const messageId = msgEl.dataset.messageId || msgEl.getAttribute?.("data-message-id");
-        const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-        
-        const isRoll = msgDoc?.isRoll || msgEl.classList.contains("dice-roll") || msgEl.querySelector?.(".dice-roll") !== null;
-        const channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+      const messageId = msgEl.dataset?.messageId || msgEl.getAttribute?.("data-message-id");
+      const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+      const isDiceOrDamage = this.isDiceOrDamage(msgDoc, {}, msgEl);
+
+      if (autoRoute && isDiceOrDamage) {
+        msgEl.dataset.channel = "dados";
+      } else if (!msgEl.dataset?.channel) {
+        const channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral");
         msgEl.dataset.channel = channel;
       }
     });
@@ -514,6 +594,7 @@ export class ChannelManager {
     }
 
     const active = this.activeChannel;
+    const autoRoute = game.settings?.get(this.MODULE_ID, "autoRouteRolls") ?? true;
 
     if (filterStyle) {
       // Regras CSS abrangentes cobrindo todas as variações do Foundry VTT (v12, v13, ApplicationV2)
@@ -538,11 +619,14 @@ export class ChannelManager {
       for (let i = 0; i < messages.length; i++) {
         const el = messages[i];
         if (!el.dataset) continue;
-        if (!el.dataset.channel) {
-          const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
-          const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-          const isRoll = msgDoc?.isRoll || el.classList?.contains?.("dice-roll") || (el.querySelector && el.querySelector(".dice-roll") !== null);
-          el.dataset.channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isRoll ? "dados" : "geral");
+        const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
+        const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+        const isDiceOrDamage = this.isDiceOrDamage(msgDoc, {}, el);
+
+        if (autoRoute && isDiceOrDamage) {
+          el.dataset.channel = "dados";
+        } else if (!el.dataset.channel) {
+          el.dataset.channel = msgDoc?.getFlag?.(this.MODULE_ID, "channel") || (isDiceOrDamage ? "dados" : "geral");
         }
         const channel = el.dataset.channel || "geral";
         el.classList.toggle("custom-channel-hidden", channel !== active);
@@ -564,8 +648,8 @@ export class ChannelManager {
   static formatDiscordMessage(message, el) {
     if (!game.settings?.get(this.MODULE_ID, "enableDiscordStyle")) return;
 
-    // Não estiliza rolagens de dados com visual Discord
-    if (message.isRoll || el.classList.contains("dice-roll") || el.querySelector?.(".dice-roll") !== null) return;
+    // Não estiliza rolagens de dados ou cards de dano com visual Discord
+    if (this.isDiceOrDamage(message, {}, el)) return;
 
     el.classList.add("discord-styled-message");
 

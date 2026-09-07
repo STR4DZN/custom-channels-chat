@@ -1,8 +1,9 @@
 /**
  * Suite de Testes Automatizados e Benchmark de Performance
- * para o módulo custom-channels-chat v1.3.0
+ * para o módulo custom-channels-chat v1.4.0
  */
 
+import fs from "fs";
 import { ChannelManager } from "../scripts/channel-manager.js";
 import { ImageHandler } from "../scripts/image-handler.js";
 
@@ -423,7 +424,7 @@ function assert(condition, message) {
 }
 
 console.log("\n========================================================");
-console.log("   INICIANDO SUITE DE TESTES v1.3.0: custom-channels-chat");
+console.log("   INICIANDO SUITE DE TESTES v1.4.0: custom-channels-chat");
 console.log("========================================================\n");
 
 // TESTE 1: Lista padrão de canais
@@ -867,6 +868,140 @@ assert(popoutPosition !== null, "Hook renderImagePopout executado com sucesso");
 assert(popoutPosition.width <= 1920 * 0.9, "Largura do popout restrita a no máximo 90vw");
 assert(popoutPosition.height <= 1080 * 0.9, "Altura do popout restrita a no máximo 90vh");
 assert(popoutPosition.left >= 10, "Popout mantido centralizado e visível na tela");
+
+// TESTE 23: Isolamento e Ocultação das Abas da Sidebar (Prevenção de Sobreposição do Chat em Atores/Cenas/etc.)
+console.log("\nTeste 23: Isolamento CSS de abas ativas/inativas da sidebar e prevenção de vazamento do chat");
+const cssPath = new URL("../styles/custom-channels-chat.css", import.meta.url);
+const cssContent = fs.readFileSync(cssPath, "utf-8");
+
+assert(cssContent.includes("#chat.active"), "Regra CSS do container do chat restrita à classe .active");
+assert(cssContent.includes('#sidebar .tab[data-tab="chat"].active'), "Regra da tab chat restrita à classe .active");
+assert(cssContent.includes("section#chat.sidebar-tab.active"), "Regra section#chat restrita à classe .active");
+assert(cssContent.includes('#sidebar .tab[data-tab="chat"]:not(.active)'), "Regra explícita de display: none para chat inativo na sidebar");
+assert(cssContent.includes('#chat:not(.active):not(#chat-popout):not(.chat-popout)'), "Chat inativo ocultado com display: none !important exceto se for popout");
+
+// Simulação de troca de aba na sidebar para 'actors'
+let chatBarReRendered = false;
+const origRenderBar = ChannelManager.renderBar;
+ChannelManager.renderBar = () => { chatBarReRendered = true; };
+mockChat.classList.remove("active");
+globalThis.Hooks.callAll("changeSidebarTab", { tabName: "actors" });
+assert(chatBarReRendered === false, "changeSidebarTab com tabName='actors' NÃO processa aba de chat");
+ChannelManager.renderBar = origRenderBar;
+
+// TESTE 24: Detecção Robusta de Rolagens e Dano Multi-Sistemas (ChannelManager.isDiceOrDamage)
+console.log("\nTeste 24: Detector Multi-Sistemas de Rolagens e Dano (D&D 5e, PF2e, Tormenta20, Midi-QOL, etc.)");
+
+// 24a. Propriedades nativas do Foundry
+assert(ChannelManager.isDiceOrDamage({ isRoll: true }) === true, "isRoll: true reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { isRoll: true }) === true, "createData.isRoll: true reconhecido");
+assert(ChannelManager.isDiceOrDamage({ rolls: [{ total: 15 }] }) === true, "messageDoc.rolls com itens reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { rolls: [{ total: 15 }] }) === true, "data.rolls com itens reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { type: CONST.CHAT_MESSAGE_TYPES.ROLL }) === true, "data.type === ROLL reconhecido");
+
+// 24b. D&D 5e (dnd5e)
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { roll: { formula: "1d20+5" } } } }) === true, "D&D 5e flags.dnd5e.roll reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { damage: true } } }) === true, "D&D 5e flags.dnd5e.damage reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { damageRoll: { formula: "2d6" } } } }) === true, "D&D 5e flags.dnd5e.damageRoll reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { rollType: "damage" } } }) === true, "D&D 5e flags.dnd5e.rollType='damage' reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { type: "damage" } } }) === true, "D&D 5e flags.dnd5e.type='damage' reconhecido");
+
+// 24c. Pathfinder 2e (pf2e)
+assert(ChannelManager.isDiceOrDamage({}, { flags: { pf2e: { context: { type: "damage-roll" } } } }) === true, "PF2e damage-roll no context reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { pf2e: { context: { type: "spell-attack-roll" } } } }) === true, "PF2e spell-attack-roll reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { pf2e: { damage: { total: 24 } } } }) === true, "PF2e flags.pf2e.damage reconhecido");
+
+// 24d. Midi-QOL
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "midi-qol": { workflowId: "wf-123", damageRoll: true } } }) === true, "Midi-QOL com workflow e dano reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "midi-qol": { itemCardId: "item-1" } } }) === true, "Midi-QOL card reconhecido");
+
+// 24e. Ready Set Roll 5e & Better Rolls 5e
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "ready-set-roll-5e": { roll: {} } } }) === true, "Ready Set Roll 5e reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "betterrolls5e": { entries: [] } } }) === true, "Better Rolls 5e reconhecido");
+
+// 24f. Tormenta20 (T20)
+assert(ChannelManager.isDiceOrDamage({}, { flags: { tormenta20: { rollType: "dano" } } }) === true, "Tormenta20 rollType='dano' reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { t20: { dano: true } } }) === true, "T20 flag dano reconhecida");
+
+// 24g. Conteúdo HTML (marcações típicas de rolagens e dano)
+assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="dice-roll"><div class="dice-total">18</div></div>' }) === true, "HTML com .dice-roll e .dice-total reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<p>Ataque: <span class="inline-roll">[[1d20+3]]</span></p>' }) === true, "HTML com .inline-roll reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<button data-damage="2d8+4">Aplicar Dano</button>' }) === true, "HTML com [data-damage] reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="damage-card">Card de dano</div>' }) === true, "HTML com .damage-card reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="dnd5e-damage">Dano Crítico</div>' }) === true, "HTML com .dnd5e-damage reconhecido");
+assert(ChannelManager.isDiceOrDamage({}, { content: '<div class="chat-card"><span class="damage">15 de corte</span></div>' }) === true, "HTML com class='damage' reconhecido");
+
+// 24h. Inspeção em nó DOM
+const domRollEl = new MockElement("div");
+domRollEl.className = "chat-message message";
+const innerRoll = new MockElement("div");
+innerRoll.className = "dice-roll";
+domRollEl.appendChild(innerRoll);
+assert(ChannelManager.isDiceOrDamage({}, {}, domRollEl) === true, "Elemento DOM contendo .dice-roll reconhecido");
+
+const domDamageBtn = new MockElement("div");
+domDamageBtn.className = "chat-message message";
+const btnDmg = new MockElement("button");
+btnDmg.setAttribute("data-damage", "3d6");
+domDamageBtn.appendChild(btnDmg);
+assert(ChannelManager.isDiceOrDamage({}, {}, domDamageBtn) === true, "Elemento DOM contendo [data-damage] reconhecido");
+
+// 24i. Proteção contra falsos positivos (mensagens comuns não devem ir para #dados)
+assert(ChannelManager.isDiceOrDamage({}, { content: "Tomou 5 pontos de dano da armadilha!" }) === false, "Frase comum contendo a palavra 'dano' NÃO é classificada como rolagem");
+assert(ChannelManager.isDiceOrDamage({}, { content: "That weapon does 1d8 slashing damage on hit." }) === false, "Frase em inglês contendo a palavra 'damage' NÃO é classificada como rolagem");
+assert(ChannelManager.isDiceOrDamage({}, { content: "https://example.com/imagem.png" }) === false, "URL de imagem NÃO é classificada como rolagem");
+
+// TESTE 25: Roteamento Automático de Dano e Rolagens no Ciclo de Vida (preCreate, preUpdate, render)
+console.log("\nTeste 25: Roteamento de Dano e Dados no Ciclo de Vida dos Hooks");
+
+// 25a. preCreateChatMessage com dano/rolagem força canal 'dados' mesmo com outro canal ativo
+ChannelManager.setActiveChannel("off-topic");
+const mockDamageMsgDoc = {
+  content: '<div class="dice-roll"><div class="dice-total">24</div></div>',
+  updateSource(updates) { this.updates = updates; },
+  getFlag(mod, key) { return this.updates?.[`flags.${mod}.${key}`]; }
+};
+const mockDamageCreateData = {
+  content: '<div class="dice-roll"><div class="dice-total">24</div></div>',
+  flags: { "custom-channels-chat": { channel: "off-topic" } }
+};
+globalThis.Hooks.callAll("preCreateChatMessage", mockDamageMsgDoc, mockDamageCreateData, {}, "user-1");
+assert(mockDamageMsgDoc.updates?.["flags.custom-channels-chat.channel"] === "dados", "preCreateChatMessage forçou 'dados' mesmo com off-topic ativo");
+assert(mockDamageCreateData.flags["custom-channels-chat"].channel === "dados", "createData atualizado para 'dados'");
+
+// 25b. preUpdateChatMessage atualiza canal para 'dados' quando dano é adicionado
+const mockItemCardDoc = {
+  content: '<div class="dnd5e chat-card item-card">Espada Longa</div>',
+  flags: { "custom-channels-chat": { channel: "geral" } },
+  getFlag(mod, key) { return this.flags?.[mod]?.[key]; },
+  updateSource(updates) { this.updatedSource = updates; }
+};
+const mockUpdateChanges = {
+  content: '<div class="dnd5e chat-card item-card">Espada Longa<div class="dice-roll"><div class="dice-total">11</div></div></div>',
+  rolls: [{ total: 11 }]
+};
+globalThis.Hooks.callAll("preUpdateChatMessage", mockItemCardDoc, mockUpdateChanges, {}, "user-1");
+assert(mockUpdateChanges.flags?.["custom-channels-chat"]?.channel === "dados", "preUpdateChatMessage atualizou channel para 'dados' ao receber rolagem");
+
+// 25c. handleChatMessageRender força el.dataset.channel='dados' e limpa estilos de Discord
+const damageRenderEl = new MockElement("div");
+damageRenderEl.className = "chat-message message discord-styled-message";
+const avatarInCard = new MockElement("div");
+avatarInCard.className = "discord-avatar-wrap";
+damageRenderEl.appendChild(avatarInCard);
+const diceInCard = new MockElement("div");
+diceInCard.className = "dice-roll";
+damageRenderEl.appendChild(diceInCard);
+
+const damageRenderDoc = {
+  content: "Dano da Magia",
+  getFlag(mod, key) { return "geral"; } // Flag antiga dizia 'geral'
+};
+
+globalThis.Hooks.callAll("renderChatMessage", damageRenderDoc, damageRenderEl, {});
+assert(damageRenderEl.dataset.channel === "dados", "handleChatMessageRender forçou dataset.channel = 'dados' independente de flags anteriores");
+assert(!damageRenderEl.classList.contains("discord-styled-message"), "Classe discord-styled-message removida do card de dano");
+assert(damageRenderEl.querySelector(".discord-avatar-wrap") === null, "Avatar de usuário Discord removido do card de dano");
 
 
 // ============================================================================
