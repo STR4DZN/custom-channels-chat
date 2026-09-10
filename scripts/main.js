@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.1...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.2...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -182,50 +182,48 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
   const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
   const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, createData);
 
-  if (isDiceOrDamage && autoRoute) {
-    // Rolagens e cards de dano vão sempre para o canal de dados
-    if (typeof messageDoc.updateSource === "function") {
-      messageDoc.updateSource({
-        [`flags.${MODULE_ID}.channel`]: "dados"
-      });
-    }
-    if (createData) {
-      createData.flags = createData.flags || {};
-      createData.flags[MODULE_ID] = createData.flags[MODULE_ID] || {};
-      createData.flags[MODULE_ID].channel = "dados";
-      createData[`flags.${MODULE_ID}.channel`] = "dados";
-    }
-    if (messageDoc.flags) {
-      messageDoc.flags[MODULE_ID] = messageDoc.flags[MODULE_ID] || {};
-      messageDoc.flags[MODULE_ID].channel = "dados";
-    }
-  } else {
-    // Mensagens normais recebem o canal ativo no cliente do autor
-    const activeChannel = ChannelManager.getActiveChannel();
-    const existingChannel = (createData?.flags?.[MODULE_ID]?.channel) || (createData?.[`flags.${MODULE_ID}.channel`]);
-    const channelToSet = existingChannel || activeChannel;
+  const activeChannel = ChannelManager.getActiveChannel();
+  const existingChannel = createData?.flags?.[MODULE_ID]?.channel
+    || (typeof messageDoc?.getFlag === "function" ? messageDoc.getFlag(MODULE_ID, "channel") : null);
+  const targetChannel = (isDiceOrDamage && autoRoute) ? "dados" : (existingChannel || activeChannel || "geral");
 
-    // Detecta e embuti URLs diretas de imagens/GIFs (Tenor, Giphy, direct links) no conteúdo
+  const updates = {
+    [`flags.${MODULE_ID}.channel`]: targetChannel,
+    flags: {
+      [MODULE_ID]: {
+        channel: targetChannel
+      }
+    }
+  };
+
+  // Se for mensagem de texto comum, processa URLs diretas de imagens/GIFs embutidos
+  if (!isDiceOrDamage) {
     const rawContent = messageDoc.content || createData?.content || "";
     const processedContent = ImageHandler.processMessageContent(rawContent);
-
-    const updates = {
-      [`flags.${MODULE_ID}.channel`]: channelToSet
-    };
-
     if (processedContent !== rawContent) {
       updates.content = processedContent;
-      if (createData) createData.content = processedContent;
+      updates.flags[MODULE_ID].isImage = true;
       updates[`flags.${MODULE_ID}.isImage`] = true;
     }
+  }
 
-    if (typeof messageDoc.updateSource === "function") {
+  // Atualiza a fonte do documento no Foundry de forma protegida
+  if (typeof messageDoc.updateSource === "function") {
+    try {
       messageDoc.updateSource(updates);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | preCreateChatMessage updateSource erro:`, err);
     }
-    if (createData) {
-      createData.flags = createData.flags || {};
-      createData.flags[MODULE_ID] = createData.flags[MODULE_ID] || {};
-      createData.flags[MODULE_ID].channel = channelToSet;
+  }
+
+  // Atualiza createData de forma segura para o DataModel (sem chaves com ponto)
+  if (createData && typeof createData === "object") {
+    createData.flags = createData.flags || {};
+    createData.flags[MODULE_ID] = createData.flags[MODULE_ID] || {};
+    createData.flags[MODULE_ID].channel = targetChannel;
+    if (updates.content) {
+      createData.content = updates.content;
+      createData.flags[MODULE_ID].isImage = true;
     }
   }
 });
@@ -235,29 +233,17 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
  */
 Hooks.on("preUpdateChatMessage", (messageDoc, changes, options, userId) => {
   const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
-  if (!autoRoute) return;
+  if (!autoRoute || !changes) return;
 
   // Se a atualização contiver rolagem ou card de dano (ex: Midi-QOL, PF2e, D&D 5e, Tormenta20)
   if (ChannelManager.isDiceOrDamage(messageDoc, changes)) {
     const currentChannel = (typeof messageDoc?.getFlag === "function" ? messageDoc.getFlag(MODULE_ID, "channel") : null)
-      || messageDoc?.flags?.[MODULE_ID]?.channel
-      || changes?.flags?.[MODULE_ID]?.channel
-      || changes?.[`flags.${MODULE_ID}.channel`];
+      || messageDoc?.flags?.[MODULE_ID]?.channel;
 
     if (currentChannel !== "dados") {
       changes.flags = changes.flags || {};
       changes.flags[MODULE_ID] = changes.flags[MODULE_ID] || {};
       changes.flags[MODULE_ID].channel = "dados";
-      changes[`flags.${MODULE_ID}.channel`] = "dados";
-      if (typeof messageDoc.updateSource === "function") {
-        messageDoc.updateSource({
-          [`flags.${MODULE_ID}.channel`]: "dados"
-        });
-      }
-      if (messageDoc.flags) {
-        messageDoc.flags[MODULE_ID] = messageDoc.flags[MODULE_ID] || {};
-        messageDoc.flags[MODULE_ID].channel = "dados";
-      }
     }
   }
 });
@@ -323,6 +309,31 @@ Hooks.on("createChatMessage", (messageDoc, options, userId) => {
     ? "dados" 
     : ((typeof messageDoc?.getFlag === "function" ? messageDoc.getFlag(MODULE_ID, "channel") : null) || messageDoc?.flags?.[MODULE_ID]?.channel || (isDiceOrDamage ? "dados" : "geral"));
   const activeChannel = ChannelManager.getActiveChannel();
+
+  // Sincroniza o elemento DOM imediatamente no chat log se já estiver presente
+  const syncDomElement = () => {
+    const messageId = messageDoc.id || messageDoc._id;
+    if (!messageId) return;
+    const el = document.querySelector ? document.querySelector(`[data-message-id="${messageId}"], li[data-message-id="${messageId}"]`) : null;
+    if (el) {
+      el.dataset.channel = channel;
+      el.classList.toggle("custom-channel-hidden", channel !== activeChannel);
+      if (!isDiceOrDamage) {
+        ChannelManager.formatDiscordMessage(messageDoc, el);
+        ImageHandler.formatDomMessage(messageDoc, el);
+      } else {
+        const discordAvatar = el.querySelector(".discord-avatar-wrap");
+        if (discordAvatar) discordAvatar.remove();
+        el.classList.remove("discord-styled-message");
+      }
+    }
+  };
+
+  syncDomElement();
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(syncDomElement);
+  }
+  setTimeout(syncDomElement, 20);
 
   if (channel !== activeChannel) {
     ChannelManager.incrementUnread(channel);

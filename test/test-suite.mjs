@@ -1116,8 +1116,103 @@ assert(ChannelManager.unreadCounts["dados"] === 1, "Badge de não lidas incremen
 
 globalThis.document.querySelector = origQuerySelector;
 
+// TESTE 26: Prevenção de Perda de Histórico do #geral e Rolagens Consecutivas Sem Falhas
+console.log("\nTeste 26: Prevenção de Perda de Histórico do #geral e Rolagens Consecutivas Sem Falhas");
 
-// ============================================================================
+// 26a. Falsos positivos eliminados em mensagens de conversa comuns de sistemas
+assert(ChannelManager.isDiceOrDamage({ content: "Oi pessoal, prontos para a sessão?" }, { flags: { pf2e: { context: { type: "chat" } } } }) === false, "Mensagem de bate-papo PF2e NÃO é classificada como rolagem");
+assert(ChannelManager.isDiceOrDamage({ content: "Vamos entrar na taverna." }, { flags: { tormenta20: {} } }) === false, "Mensagem de texto Tormenta20 NÃO é classificada como rolagem");
+assert(ChannelManager.isDiceOrDamage({ content: "Dê uma olhada nesta arma: <a class='content-link' data-item-id='espada-123'>Espada Vorpal</a>" }) === false, "Link de item comum NÃO é classificado como rolagem");
+assert(ChannelManager.isDiceOrDamage({ content: "Aqui está o guia @UUID[JournalEntry.abc]" }) === false, "Menção de diário/ator NÃO é classificada como rolagem");
+assert(ChannelManager.isDiceOrDamage({ content: "Sim, concordo com o plano." }, { flags: { swade: {} } }) === false, "Texto simples em SWADE NÃO é classificado como rolagem");
+
+// 26b. tagExistingMessages garante que mensagens normais permaneçam no #geral
+const mockMsgLogGeral = new MockElement("li");
+mockMsgLogGeral.setAttribute("data-message-id", "msg-hist-1");
+mockMsgLogGeral.dataset.messageId = "msg-hist-1";
+mockChatLog.appendChild(mockMsgLogGeral);
+
+globalThis.game.messages.set("msg-hist-1", {
+  id: "msg-hist-1",
+  content: "Histórico antigo da conversa",
+  flags: { "custom-channels-chat": { channel: "geral" }, pf2e: {} },
+  getFlag(mod, key) { return this.flags?.[mod]?.[key]; }
+});
+
+ChannelManager.tagExistingMessages(mockChatLog);
+assert(mockMsgLogGeral.dataset.channel === "geral", "tagExistingMessages preserva canal 'geral' para mensagens de texto comuns com flags de sistema");
+
+// 26c. Três rolagens consecutivas de dados funcionam sem quebrar o ciclo de vida
+ChannelManager.setActiveChannel("dados");
+
+for (let r = 1; r <= 3; r++) {
+  const rollDoc = {
+    id: `roll-msg-${r}`,
+    content: `<div class="dice-roll"><div class="dice-total">${10 + r}</div></div>`,
+    isRoll: true,
+    rolls: [{ total: 10 + r }],
+    flags: {},
+    updateSource(updates) {
+      this.updates = updates;
+      if (updates.flags) this.flags = { ...this.flags, ...updates.flags };
+    },
+    getFlag(mod, key) { return this.flags?.[mod]?.[key]; }
+  };
+  const rollCreateData = {
+    content: rollDoc.content,
+    isRoll: true,
+    rolls: rollDoc.rolls,
+    flags: {}
+  };
+
+  // Simula preCreate
+  globalThis.Hooks.callAll("preCreateChatMessage", rollDoc, rollCreateData, {}, "user-1");
+  assert(rollCreateData.flags["custom-channels-chat"]?.channel === "dados", `Rolagem ${r}: createData recebeu canal 'dados'`);
+
+  // Simula preUpdate (adicionando dano ou avaliação)
+  const rollChanges = {
+    content: rollDoc.content,
+    rolls: rollDoc.rolls
+  };
+  globalThis.Hooks.callAll("preUpdateChatMessage", rollDoc, rollChanges, {}, "user-1");
+  assert(rollChanges.flags?.["custom-channels-chat"]?.channel === "dados" || rollDoc.flags?.["custom-channels-chat"]?.channel === "dados", `Rolagem ${r}: preUpdate preservou canal 'dados'`);
+
+  // Simula renderização do elemento DOM
+  const rollEl = new MockElement("li");
+  rollEl.setAttribute("data-message-id", rollDoc.id);
+  rollEl.dataset.messageId = rollDoc.id;
+  mockChatLog.appendChild(rollEl);
+
+  globalThis.Hooks.callAll("renderChatMessage", rollDoc, rollEl, {});
+  assert(rollEl.dataset.channel === "dados", `Rolagem ${r}: DOM recebeu data-channel='dados'`);
+  assert(!rollEl.classList.contains("custom-channel-hidden"), `Rolagem ${r}: Visível em tempo real no canal #dados`);
+}
+
+// 26d. Mensagem comum em tempo real no #geral aparece imediatamente
+ChannelManager.setActiveChannel("geral");
+const realTimeTextDoc = {
+  id: "realtime-text-1",
+  content: "Mensagem enviada agora em tempo real no #geral!",
+  flags: {},
+  updateSource(updates) { this.updates = updates; },
+  getFlag(mod, key) { return this.updates?.[`flags.${mod}.${key}`]; }
+};
+const realTimeCreateData = {
+  content: realTimeTextDoc.content,
+  flags: {}
+};
+globalThis.Hooks.callAll("preCreateChatMessage", realTimeTextDoc, realTimeCreateData, {}, "user-1");
+assert(realTimeCreateData.flags["custom-channels-chat"]?.channel === "geral", "Nova mensagem de texto recebe canal 'geral'");
+
+const realTimeEl = new MockElement("li");
+realTimeEl.setAttribute("data-message-id", "realtime-text-1");
+realTimeEl.dataset.messageId = "realtime-text-1";
+mockChatLog.appendChild(realTimeEl);
+
+globalThis.Hooks.callAll("renderChatMessage", realTimeTextDoc, realTimeEl, {});
+assert(realTimeEl.dataset.channel === "geral", "Elemento DOM recebe data-channel='geral'");
+assert(!realTimeEl.classList.contains("custom-channel-hidden"), "Nova mensagem renderizada visível em tempo real em #geral");
+
 // 3. BENCHMARK DE PERFORMANCE & CARGA
 // ============================================================================
 

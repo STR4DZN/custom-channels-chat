@@ -71,7 +71,7 @@ export class ChannelManager {
    */
   static isDiceOrDamage(messageDoc = {}, data = {}, el = null) {
     // 1. Verificação direta de flags ou propriedades booleanas de rolagem
-    if (messageDoc?.isRoll || data?.isRoll) return true;
+    if (messageDoc?.isRoll === true || data?.isRoll === true) return true;
     if (messageDoc?.roll || data?.roll) return true;
 
     // Rolagens em coleções ou arrays (Foundry v10, v11, v12, v13)
@@ -94,63 +94,90 @@ export class ChannelManager {
     // Inspeção de flavor (muito usado em rolagens de dano por fichas ou macros)
     const flavor = data?.flavor || messageDoc?.flavor;
     if (flavor && typeof flavor === "string") {
-      if (/(?:damage|dano|roll|rolagem|attack|ataque|check|teste|save|salvaguarda|resistencia|resistência|cura|heal|healing|critical|critico|crítico|hit|acerto|erro|miss)\b/i.test(flavor)) return true;
+      if (/(?:damage|dano|roll|rolagem|attack|ataque|save|salvaguarda|resist[eê]ncia|cura|heal|healing|critical|cr[ií]tico)\b/i.test(flavor)) return true;
     }
 
-    // 2. Flags de sistemas e módulos de automação (qualquer atividade mecânica de ficha/item/dano)
+    // 2. Flags de sistemas e módulos de automação (apenas se indicarem atividade mecânica/rolagem real)
     const flags = this.extractAllFlags(messageDoc, data);
 
-    // D&D 5e: qualquer card de item, atividade, ataque, dano, uso de magia, etc.
+    // D&D 5e: qualquer card de item com rolagem, atividade, ataque, dano, etc.
     if (flags.dnd5e) {
       const d = flags.dnd5e;
-      if (d.roll || d.damage || d.damageRoll || d.rollType || d.type || d.messageType || d.targets || d.item || d.activity || d.use) return true;
+      if (d.roll || d.damage || d.damageRoll || d.rollType || (d.type && d.type !== "chat") || (d.messageType && d.messageType !== "chat") || d.targets || d.activity || d.use) return true;
     }
 
-    // Pathfinder 2e: qualquer contexto, dano, strike, magia
-    if (flags.pf2e) return true;
+    // Pathfinder 2e: dano, strike, ou contextos mecânicos (NÃO mensagens comuns de chat)
+    if (flags.pf2e) {
+      const p = flags.pf2e;
+      if (p.damage || p.strike || (p.context && p.context.type && p.context.type !== "chat")) return true;
+    }
 
-    // Midi-QOL: automações completas de ataque e dano
-    if (flags["midi-qol"] || flags.midiqol) return true;
+    // Midi-QOL: automações completas de ataque, dano e workflow
+    if (flags["midi-qol"] || flags.midiqol) {
+      const m = flags["midi-qol"] || flags.midiqol;
+      if (m.damageRoll || m.attackRoll || m.workflowId || m.itemCardId) return true;
+    }
 
     // Ready Set Roll 5e
-    if (flags["ready-set-roll-5e"]) return true;
+    if (flags["ready-set-roll-5e"]) {
+      const r = flags["ready-set-roll-5e"];
+      if (r.roll || r.entries) return true;
+    }
 
     // Better Rolls 5e
-    if (flags.betterrolls5e || flags["betterrolls5e"]) return true;
+    if (flags.betterrolls5e || flags["betterrolls5e"]) {
+      const b = flags.betterrolls5e || flags["betterrolls5e"];
+      if (b.entries || b.roll) return true;
+    }
 
-    // Tormenta20 / T20 / Ordem Paranormal
-    if (flags.tormenta20 || flags.t20 || flags.ordemparanormal || flags.op) return true;
+    // Tormenta20 / T20 / Ordem Paranormal: apenas rolagens, danos ou testes mecânicos
+    if (flags.tormenta20 || flags.t20 || flags.ordemparanormal || flags.op) {
+      const t = flags.tormenta20 || flags.t20 || flags.ordemparanormal || flags.op;
+      if (t.rollType || t.dano || t.ataque || t.teste || t.pericia || t.resultado) return true;
+    }
 
     // Dice So Nice (3D dice)
-    if (flags["dice-so-nice"] || flags.dsn) return true;
+    if (flags["dice-so-nice"] || flags.dsn) {
+      const dsn = flags["dice-so-nice"] || flags.dsn;
+      if (typeof dsn === "object") {
+        if (dsn.roll || dsn.dsnShowFormula || dsn.rolls || Object.keys(dsn).length === 0) return true;
+      } else if (dsn) {
+        return true;
+      }
+    }
 
     // Savage Worlds (SWADE)
-    if (flags.swade) return true;
+    if (flags.swade) {
+      const s = flags.swade;
+      if (s.roll || s.damage || s.action) return true;
+    }
 
     // Call of Cthulhu / CoC / Cyberpunk / Cypher
-    if (flags.coc7 || flags["cyberpunk-red-core"] || flags.cyphersystem) return true;
+    if (flags.coc7?.roll || flags.coc7?.check) return true;
+    if (flags["cyberpunk-red-core"]?.roll || flags["cyberpunk-red-core"]?.damage) return true;
+    if (flags.cyphersystem?.roll) return true;
 
     // Tabelas ou rolagens core
     if (flags.core?.RollTable || flags.core?.roll) return true;
 
-    // 3. Inspeção de conteúdo HTML por padrões de rolagem, cards de itens ou dano
+    // 3. Inspeção de conteúdo HTML por padrões de rolagem ou dano
     const content = data?.content || messageDoc?.content;
     if (content && typeof content === "string") {
-      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|dice-tooltip|inline-roll|damage-roll|damage-card|damage-total|dnd5e-damage|dnd5e-roll|card-damage|target-damage|damage-application|damage-apply|chat-damage-buttons|rolagem-dano|dano-total|card-dano|aplicar-dano|data-damage|data-roll|data-dano|data-formula|chat-card|item-card|data-item-id|data-action=["'](?:damage|applyDamage|apply-damage|rollDamage|roll-damage|aplicar-dano|attack|rollAttack|save|activityUse|use|heal|applyHeal|apply-heal|strike-damage|strike-critical)["']|data-acao=["'](?:dano|aplicar-dano|rolar-dano|ataque|rolar-ataque|teste|cura)["']|data-roll-type=["'](?:damage|attack|heal)["']|inline-dsn-hidden|class=["'][^"']*\b(?:damage|dano|dice-roll|item-card|chat-card)\b|\[\[/i;
+      const DAMAGE_DICE_REGEX = /dice-roll|dice-result|dice-total|dice-formula|dice-tooltip|inline-roll|damage-roll|damage-card|damage-total|dnd5e-damage|dnd5e-roll|card-damage|target-damage|damage-application|damage-apply|chat-damage-buttons|rolagem-dano|dano-total|card-dano|aplicar-dano|data-damage|data-roll|data-dano|data-formula|data-action=["'](?:damage|applyDamage|apply-damage|rollDamage|roll-damage|aplicar-dano|attack|rollAttack|save|activityUse|heal|applyHeal|apply-heal|strike-damage|strike-critical)["']|data-acao=["'](?:dano|aplicar-dano|rolar-dano|ataque|rolar-ataque|teste|cura)["']|data-roll-type=["'](?:damage|attack|heal)["']|class=["'][^"']*\b(?:damage|dano|damage-roll|damage-card|dnd5e-damage|dice-roll)\b|\[\[/i;
       if (DAMAGE_DICE_REGEX.test(content)) return true;
     }
 
     // 4. Inspeção no elemento DOM renderizado (se fornecido)
     if (el) {
-      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano") || el.classList?.contains?.("damage-card") || el.classList?.contains?.("chat-card") || el.classList?.contains?.("item-card")) return true;
+      if (el.classList?.contains?.("dice-roll") || el.classList?.contains?.("damage-roll") || el.classList?.contains?.("damage-card") || el.classList?.contains?.("damage") || el.classList?.contains?.("dano")) return true;
       if (typeof el.querySelector === "function") {
         const rollEl = el.querySelector(
           ".dice-roll, .dice-result, .dice-total, .dice-formula, .inline-roll, " +
           "[data-damage], [data-roll], [data-dano], [data-formula], [data-damage-type], [data-tipo-dano], " +
-          ".damage-roll, .damage-card, .damage-total, .dano-total, .damage, .dnd5e-damage, .chat-card, .item-card, " +
+          ".damage-roll, .damage-card, .damage-total, .dano-total, .damage, .dano, .dnd5e-damage, " +
           ".chat-damage-buttons, .apply-damage, .aplicar-dano, " +
-          '[data-action="applyDamage"], [data-action="damage"], [data-action="apply-damage"], [data-action="rollDamage"], [data-action="aplicar-dano"], [data-action="attack"], [data-action="activityUse"], [data-action="use"], [data-action="heal"], [data-action="applyHeal"], [data-action="strike-damage"], ' +
-          '[data-acao="dano"], [data-acao="aplicar-dano"], [data-acao="rolar-dano"], [data-acao="ataque"], [data-acao="rolar-ataque"], [data-acao="teste"], [data-acao="cura"], [data-roll-type="damage"], [data-item-id]'
+          '[data-action="applyDamage"], [data-action="damage"], [data-action="apply-damage"], [data-action="rollDamage"], [data-action="aplicar-dano"], [data-action="attack"], [data-action="activityUse"], [data-action="applyHeal"], [data-action="strike-damage"], ' +
+          '[data-acao="dano"], [data-acao="aplicar-dano"], [data-acao="rolar-dano"], [data-acao="ataque"], [data-acao="rolar-ataque"], [data-acao="teste"], [data-acao="cura"], [data-roll-type="damage"]'
         );
         if (rollEl !== null) return true;
       }
@@ -569,10 +596,11 @@ export class ChannelManager {
 
       if (autoRoute && isDiceOrDamage) {
         msgEl.dataset.channel = "dados";
-      } else if (!msgEl.dataset?.channel) {
+      } else {
         const channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
           || msgDoc?.flags?.[this.MODULE_ID]?.channel
-          || (isDiceOrDamage ? "dados" : "geral");
+          || msgEl.dataset?.channel
+          || "geral";
         msgEl.dataset.channel = channel;
       }
     });
@@ -672,13 +700,13 @@ export class ChannelManager {
     const autoRoute = game.settings?.get(this.MODULE_ID, "autoRouteRolls") ?? true;
 
     if (filterStyle) {
-      // Regras CSS abrangentes cobrindo todas as variações do Foundry VTT (v12, v13, ApplicationV2)
+      // Regras CSS abrangentes cobrindo variações do Foundry VTT (v12, v13, ApplicationV2)
       filterStyle.textContent = `
         #chat-log .chat-message:not([data-channel="${active}"]),
         #chat-log .message:not([data-channel="${active}"]),
-        #chat-log li[data-message-id]:not([data-channel="${active}"]),
-        .chat-log [data-message-id]:not([data-channel="${active}"]),
-        #chat [data-message-id]:not([data-channel="${active}"]) {
+        #chat-log [data-channel]:not([data-channel="${active}"]),
+        .chat-log [data-channel]:not([data-channel="${active}"]),
+        #chat [data-message-id][data-channel]:not([data-channel="${active}"]) {
           display: none !important;
         }
         li.custom-channel-hidden,
@@ -694,18 +722,21 @@ export class ChannelManager {
       for (let i = 0; i < messages.length; i++) {
         const el = messages[i];
         if (!el.dataset) continue;
-        const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
-        const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-        const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
+        let channel = el.dataset.channel;
+        if (!channel) {
+          const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
+          const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+          const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
 
-        if (autoRoute && isDiceOrDamage) {
-          el.dataset.channel = "dados";
-        } else if (!el.dataset.channel) {
-          el.dataset.channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
-            || msgDoc?.flags?.[this.MODULE_ID]?.channel
-            || (isDiceOrDamage ? "dados" : "geral");
+          if (autoRoute && isDiceOrDamage) {
+            channel = "dados";
+          } else {
+            channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+              || msgDoc?.flags?.[this.MODULE_ID]?.channel
+              || "geral";
+          }
+          el.dataset.channel = channel;
         }
-        const channel = el.dataset.channel || "geral";
         el.classList.toggle("custom-channel-hidden", channel !== active);
       }
       chatLog.scrollTop = chatLog.scrollHeight;
