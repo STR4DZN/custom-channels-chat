@@ -557,6 +557,18 @@ export class ChannelManager {
       }
     }
 
+    // Observer leve para garantir que mensagens inseridas dinamicamente pelo Foundry sejam marcadas e filtradas
+    const listEl = chatLog || (chatContainer?.querySelector ? chatContainer.querySelector("ol, ul, .chat-log, .chat-messages") : null);
+    if (listEl && !listEl.dataset?.customChannelObserved) {
+      if (listEl.dataset) listEl.dataset.customChannelObserved = "true";
+      if (typeof MutationObserver !== "undefined") {
+        const obs = new MutationObserver(() => {
+          this.filterMessages();
+        });
+        obs.observe(listEl, { childList: true });
+      }
+    }
+
     // Assegura que o botão do canal ativo esteja visível sem rolar os containers pais
     const activeTab = nav.querySelector(`.custom-channel-tab[data-channel="${this.activeChannel}"]`);
     if (activeTab) {
@@ -565,45 +577,66 @@ export class ChannelManager {
 
     // Inicializa marcação das mensagens existentes e aplica o filtro
     this.tagExistingMessages(root);
+    this.filterMessages();
     setTimeout(() => this.filterMessages(), 30);
   }
 
   /**
    * Obtém todos os elementos de mensagem dentro de um container com suporte a múltiplas estruturas do Foundry
-   * @param {HTMLElement} [container] 
+   * @param {HTMLElement|Document} [container] 
    * @returns {HTMLElement[]}
    */
   static getMessageElements(container = document) {
-    if (!container || !container.querySelectorAll) return [];
+    const scope = container || document;
+    if (!scope || !scope.querySelectorAll) return [];
     try {
-      return Array.from(container.querySelectorAll("[data-message-id], #chat-log > li, .chat-message"));
+      return Array.from(scope.querySelectorAll("[data-message-id], .chat-message"));
     } catch (e) {
       return [];
     }
   }
 
   /**
-   * Garante que todas as mensagens no DOM possuam o atributo data-channel
-   * @param {HTMLElement} [root] 
+   * Garante que todas as mensagens no DOM possuam o atributo data-channel e visibilidade correta
+   * @param {HTMLElement|Document} [root] 
    */
-  static tagExistingMessages(root) {
+  static tagExistingMessages(root = document) {
     const messages = this.getMessageElements(root || document);
     const autoRoute = game.settings?.get(this.MODULE_ID, "autoRouteRolls") ?? true;
-    messages.forEach(msgEl => {
-      const messageId = msgEl.dataset?.messageId || msgEl.getAttribute?.("data-message-id");
-      const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-      const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, msgEl);
+    const active = this.getActiveChannel();
 
+    for (let i = 0; i < messages.length; i++) {
+      const el = messages[i];
+      if (!el) continue;
+
+      const messageId = el.dataset?.messageId || el.getAttribute?.("data-message-id");
+      const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+      const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
+
+      let channel;
       if (autoRoute && isDiceOrDamage) {
-        msgEl.dataset.channel = "dados";
+        channel = "dados";
       } else {
-        const channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+        channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
           || msgDoc?.flags?.[this.MODULE_ID]?.channel
-          || msgEl.dataset?.channel
-          || "geral";
-        msgEl.dataset.channel = channel;
+          || el.dataset?.channel
+          || el.getAttribute?.("data-channel")
+          || (isDiceOrDamage ? "dados" : "geral");
       }
-    });
+
+      if (el.dataset) el.dataset.channel = channel;
+      if (el.setAttribute) el.setAttribute("data-channel", channel);
+
+      const isVisible = (channel === active);
+      if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
+      if (el.style) {
+        if (isVisible) {
+          el.style.removeProperty("display");
+        } else {
+          el.style.setProperty("display", "none", "important");
+        }
+      }
+    }
   }
 
   /**
@@ -689,62 +722,90 @@ export class ChannelManager {
    * Atualiza a regra CSS de alta performance O(1) e a visibilidade direta das mensagens
    */
   static filterMessages() {
-    let filterStyle = document.getElementById("custom-channels-filter-style");
+    let filterStyle = this.filterStyleElement || document.getElementById("custom-channels-filter-style");
     if (!filterStyle && document.head) {
       filterStyle = document.createElement("style");
       filterStyle.id = "custom-channels-filter-style";
       document.head.appendChild(filterStyle);
     }
+    this.filterStyleElement = filterStyle;
 
-    const active = this.activeChannel;
+    const active = this.activeChannel || "geral";
     const autoRoute = game.settings?.get(this.MODULE_ID, "autoRouteRolls") ?? true;
 
-    if (filterStyle) {
-      // Regras CSS abrangentes cobrindo variações do Foundry VTT (v12, v13, ApplicationV2)
+    if (filterStyle && this.lastFilteredChannel !== active) {
+      this.lastFilteredChannel = active;
+      // Regras CSS abrangentes cobrindo variações do Foundry VTT (v12, v13, ApplicationV2, Popouts)
       filterStyle.textContent = `
         #chat-log .chat-message:not([data-channel="${active}"]),
         #chat-log .message:not([data-channel="${active}"]),
+        .chat-log .chat-message:not([data-channel="${active}"]),
+        .chat-log .message:not([data-channel="${active}"]),
+        .chat-message:not([data-channel="${active}"]),
+        .message:not([data-channel="${active}"]),
+        #chat [data-channel]:not([data-channel="${active}"]),
+        [data-tab="chat"] [data-channel]:not([data-channel="${active}"]),
+        .chat-sidebar [data-channel]:not([data-channel="${active}"]),
         #chat-log [data-channel]:not([data-channel="${active}"]),
         .chat-log [data-channel]:not([data-channel="${active}"]),
-        #chat [data-message-id][data-channel]:not([data-channel="${active}"]) {
-          display: none !important;
-        }
-        li.custom-channel-hidden,
-        .custom-channel-hidden {
+        .chat-messages [data-channel]:not([data-channel="${active}"]),
+        #chat-popout [data-channel]:not([data-channel="${active}"]),
+        .chat-popout [data-channel]:not([data-channel="${active}"]),
+        li.chat-message[data-channel]:not([data-channel="${active}"]),
+        [data-message-id][data-channel]:not([data-channel="${active}"]),
+        .custom-channel-hidden,
+        li.custom-channel-hidden {
           display: none !important;
         }
       `;
     }
 
-    const chatLog = document.getElementById("chat-log") || document.querySelector?.(".chat-log");
-    if (chatLog) {
-      const messages = chatLog.children ? Array.from(chatLog.children) : this.getMessageElements(chatLog);
-      for (let i = 0; i < messages.length; i++) {
-        const el = messages[i];
-        if (!el.dataset) continue;
-        let channel = el.dataset.channel;
-        if (!channel) {
-          const messageId = el.dataset.messageId || el.getAttribute?.("data-message-id");
-          const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
-          const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
+    // Processa diretamente todos os elementos de mensagem no DOM (sidebar, v13, popouts)
+    const messages = this.getMessageElements(document);
+    for (let i = 0; i < messages.length; i++) {
+      const el = messages[i];
+      if (!el) continue;
 
-          if (autoRoute && isDiceOrDamage) {
-            channel = "dados";
-          } else {
-            channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
-              || msgDoc?.flags?.[this.MODULE_ID]?.channel
-              || "geral";
-          }
-          el.dataset.channel = channel;
+      let channel = el.dataset?.channel || (el.getAttribute && el.getAttribute("data-channel"));
+      if (!channel) {
+        const messageId = el.dataset?.messageId || el.getAttribute?.("data-message-id");
+        const msgDoc = messageId && game.messages ? game.messages.get(messageId) : null;
+        const isDiceOrDamage = this.isDiceOrDamage(msgDoc, msgDoc?._source || {}, el);
+
+        if (autoRoute && isDiceOrDamage) {
+          channel = "dados";
+        } else {
+          channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+            || msgDoc?.flags?.[this.MODULE_ID]?.channel
+            || (isDiceOrDamage ? "dados" : "geral");
         }
-        el.classList.toggle("custom-channel-hidden", channel !== active);
+
+        if (el.dataset) el.dataset.channel = channel;
+        if (el.setAttribute) el.setAttribute("data-channel", channel);
       }
-      chatLog.scrollTop = chatLog.scrollHeight;
+
+      const isVisible = (channel === active);
+      if (isVisible) {
+        if (el.classList?.contains("custom-channel-hidden")) el.classList.remove("custom-channel-hidden");
+        if (el.style?.display) el.style.removeProperty("display");
+      } else {
+        if (!el.classList?.contains("custom-channel-hidden")) el.classList.add("custom-channel-hidden");
+        if (el.style?.display !== "none") el.style.setProperty("display", "none", "important");
+      }
     }
 
     // Rola suavemente para o final do chat
+    let chatLog = this.chatLogElement;
+    if (!chatLog) {
+      chatLog = document.getElementById("chat-log")
+        || document.querySelector?.(".chat-log, .chat-messages, #chat ol, .chat-sidebar ol, #chat-popout ol, .chat-scroll");
+      this.chatLogElement = chatLog;
+    }
+    if (chatLog) {
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
     if (ui.chat && typeof ui.chat.scrollBottom === "function") {
-      ui.chat.scrollBottom();
+      try { ui.chat.scrollBottom(); } catch (e) {}
     }
   }
 

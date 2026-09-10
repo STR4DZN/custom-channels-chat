@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.2...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.3...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -110,6 +110,7 @@ export function syncChatVisibility(activeTabName = null) {
       ChannelManager.renderBar(globalThis.ui?.chat, chatEl);
     } else {
       ChannelManager.updateBarUI();
+      ChannelManager.filterMessages();
     }
     if (!chatEl.querySelector(".custom-chat-media-toolbar")) {
       ImageHandler.initInput(globalThis.ui?.chat, chatEl);
@@ -269,9 +270,19 @@ function handleChatMessageRender(messageDoc, html) {
   }
   
   // Atributo data-channel para filtragem CSS O(1) e classe auxiliar
-  el.dataset.channel = channel;
+  if (el.dataset) el.dataset.channel = channel;
+  if (el.setAttribute) el.setAttribute("data-channel", channel);
   const active = ChannelManager.getActiveChannel();
-  el.classList.toggle("custom-channel-hidden", channel !== active);
+  const isVisible = (channel === active);
+
+  if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
+  if (el.style) {
+    if (isVisible) {
+      el.style.removeProperty("display");
+    } else {
+      el.style.setProperty("display", "none", "important");
+    }
+  }
 
   // Aplica estilo Discord e imagem apenas para mensagens normais de bate-papo
   if (!isDiceOrDamage) {
@@ -281,7 +292,7 @@ function handleChatMessageRender(messageDoc, html) {
     // Garante que nenhum elemento de avatar Discord permaneça em card de rolagem/dano
     const discordAvatar = el.querySelector(".discord-avatar-wrap");
     if (discordAvatar) discordAvatar.remove();
-    el.classList.remove("discord-styled-message");
+    if (el.classList) el.classList.remove("discord-styled-message");
   }
 }
 
@@ -316,15 +327,25 @@ Hooks.on("createChatMessage", (messageDoc, options, userId) => {
     if (!messageId) return;
     const el = document.querySelector ? document.querySelector(`[data-message-id="${messageId}"], li[data-message-id="${messageId}"]`) : null;
     if (el) {
-      el.dataset.channel = channel;
-      el.classList.toggle("custom-channel-hidden", channel !== activeChannel);
+      if (el.dataset) el.dataset.channel = channel;
+      if (el.setAttribute) el.setAttribute("data-channel", channel);
+      const isVisible = (channel === activeChannel);
+      if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
+      if (el.style) {
+        if (isVisible) {
+          el.style.removeProperty("display");
+        } else {
+          el.style.setProperty("display", "none", "important");
+        }
+      }
+
       if (!isDiceOrDamage) {
         ChannelManager.formatDiscordMessage(messageDoc, el);
         ImageHandler.formatDomMessage(messageDoc, el);
       } else {
         const discordAvatar = el.querySelector(".discord-avatar-wrap");
         if (discordAvatar) discordAvatar.remove();
-        el.classList.remove("discord-styled-message");
+        if (el.classList) el.classList.remove("discord-styled-message");
       }
     }
   };
@@ -360,12 +381,22 @@ Hooks.on("updateChatMessage", (messageDoc, changes, options, userId) => {
   if (messageId) {
     const el = document.querySelector ? (document.querySelector(`[data-message-id="${messageId}"], li[data-message-id="${messageId}"]`)) : null;
     if (el) {
-      el.dataset.channel = channel;
-      el.classList.toggle("custom-channel-hidden", channel !== activeChannel);
+      if (el.dataset) el.dataset.channel = channel;
+      if (el.setAttribute) el.setAttribute("data-channel", channel);
+      const isVisible = (channel === activeChannel);
+      if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
+      if (el.style) {
+        if (isVisible) {
+          el.style.removeProperty("display");
+        } else {
+          el.style.setProperty("display", "none", "important");
+        }
+      }
+
       if (isDiceOrDamage) {
         const discordAvatar = el.querySelector(".discord-avatar-wrap");
         if (discordAvatar) discordAvatar.remove();
-        el.classList.remove("discord-styled-message");
+        if (el.classList) el.classList.remove("discord-styled-message");
       }
     }
   }
