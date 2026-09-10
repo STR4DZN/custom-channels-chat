@@ -1213,7 +1213,85 @@ globalThis.Hooks.callAll("renderChatMessage", realTimeTextDoc, realTimeEl, {});
 assert(realTimeEl.dataset.channel === "geral", "Elemento DOM recebe data-channel='geral'");
 assert(!realTimeEl.classList.contains("custom-channel-hidden"), "Nova mensagem renderizada visível em tempo real em #geral");
 
-// 3. BENCHMARK DE PERFORMANCE & CARGA
+// TESTE 27: Investigação de Histórico Já Existente e Anterior do Sistema (Pré-Módulo e Sessões Passadas)
+console.log("\nTeste 27: Investigação e Validação de Histórico Existente e Anterior do Sistema");
+
+// 27a. Mensagens antigas criadas ANTES da instalação do módulo (sem nenhuma flag de canal)
+const ancientMessages = [
+  { id: "old-txt-1", content: "Mensagem histórica 1: Bem-vindos à taverna!", isRoll: false },
+  { id: "old-txt-2", content: "Mensagem histórica 2: Vamos falar com o estalajadeiro.", isRoll: false },
+  { id: "old-txt-3", content: "Mensagem histórica 3: Alguém viu o mapa?", isRoll: false },
+  { id: "old-roll-1", content: '<div class="dice-roll"><div class="dice-total">17</div></div>', isRoll: true, rolls: [{ total: 17 }] },
+  { id: "old-roll-2", content: '<div class="dice-roll"><div class="dice-total">8</div></div>', isRoll: true, rolls: [{ total: 8 }] },
+  { id: "old-dmg-1", content: '<div class="damage-card"><div class="dice-total">22</div></div>', isRoll: false, flavor: "Rolagem de Dano: 3d6+4 Fogo" },
+  { id: "old-offtopic-1", content: "Galera, vou pedir uma pizza aqui na vida real.", isRoll: false, flags: { "custom-channels-chat": { channel: "off-topic" } } }
+];
+
+const ancientElements = [];
+for (const msg of ancientMessages) {
+  const doc = {
+    id: msg.id,
+    content: msg.content,
+    isRoll: msg.isRoll,
+    rolls: msg.rolls,
+    flavor: msg.flavor,
+    flags: msg.flags || {},
+    getFlag(mod, key) { return this.flags?.[mod]?.[key]; }
+  };
+  globalThis.game.messages.set(msg.id, doc);
+
+  const el = new MockElement("li");
+  el.setAttribute("data-message-id", msg.id);
+  el.dataset.messageId = msg.id;
+  mockChatLog.appendChild(el);
+  ancientElements.push({ doc, el });
+}
+
+// 27b. Simula entrada no mundo ou F5: tagExistingMessages processa todo o histórico do banco
+ChannelManager.tagExistingMessages(mockChatLog);
+
+const oldTxt1 = ancientElements.find(a => a.doc.id === "old-txt-1").el;
+const oldTxt2 = ancientElements.find(a => a.doc.id === "old-txt-2").el;
+const oldRoll1 = ancientElements.find(a => a.doc.id === "old-roll-1").el;
+const oldRoll2 = ancientElements.find(a => a.doc.id === "old-roll-2").el;
+const oldDmg1 = ancientElements.find(a => a.doc.id === "old-dmg-1").el;
+const oldOfftopic = ancientElements.find(a => a.doc.id === "old-offtopic-1").el;
+
+assert(oldTxt1.dataset.channel === "geral", "Histórico anterior: mensagem de texto antiga 1 associada ao #geral");
+assert(oldTxt2.dataset.channel === "geral", "Histórico anterior: mensagem de texto antiga 2 associada ao #geral");
+assert(oldRoll1.dataset.channel === "dados", "Histórico anterior: rolagem antiga 1 associada ao #dados");
+assert(oldRoll2.dataset.channel === "dados", "Histórico anterior: rolagem antiga 2 associada ao #dados");
+assert(oldDmg1.dataset.channel === "dados", "Histórico anterior: card de dano antigo associado ao #dados");
+assert(oldOfftopic.dataset.channel === "off-topic", "Histórico anterior: mensagem com flag de canal pré-existente associada a #off-topic");
+
+// 27c. Visibilidade correta do histórico ao alternar entre abas
+ChannelManager.setActiveChannel("geral");
+assert(!oldTxt1.classList.contains("custom-channel-hidden"), "Histórico: texto antigo visível no canal #geral");
+assert(oldRoll1.classList.contains("custom-channel-hidden"), "Histórico: rolagem antiga oculta no canal #geral");
+
+ChannelManager.setActiveChannel("dados");
+assert(oldTxt1.classList.contains("custom-channel-hidden"), "Histórico: texto antigo oculto no canal #dados");
+assert(!oldRoll1.classList.contains("custom-channel-hidden"), "Histórico: rolagem antiga visível no canal #dados");
+assert(!oldDmg1.classList.contains("custom-channel-hidden"), "Histórico: card de dano antigo visível no canal #dados");
+
+// 27d. Simula Lazy-Loading / Scroll Up do Foundry (carregamento sob demanda de lotes mais antigos)
+const batchLoadedRollDoc = {
+  id: "ancient-batch-roll-99",
+  content: '<div class="dice-roll"><div class="dice-total">19</div></div>',
+  isRoll: true,
+  rolls: [{ total: 19 }],
+  flags: {},
+  getFlag(mod, key) { return this.flags?.[mod]?.[key]; }
+};
+const batchLoadedRollEl = new MockElement("li");
+batchLoadedRollEl.setAttribute("data-message-id", batchLoadedRollDoc.id);
+batchLoadedRollEl.dataset.messageId = batchLoadedRollDoc.id;
+mockChatLog.prepend(batchLoadedRollEl); // Prepend simulando scroll up
+
+globalThis.Hooks.callAll("renderChatMessage", batchLoadedRollDoc, batchLoadedRollEl, {});
+assert(batchLoadedRollEl.dataset.channel === "dados", "Scroll Up / Lazy-load: lote antigo de rolagem recebe canal 'dados' no hook");
+assert(!batchLoadedRollEl.classList.contains("custom-channel-hidden"), "Scroll Up / Lazy-load: rolagem antiga visível na aba ativa #dados");
+
 // ============================================================================
 
 console.log("\n========================================================");
