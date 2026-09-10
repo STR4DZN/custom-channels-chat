@@ -9,7 +9,7 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.3...`);
+  console.log(`${MODULE_ID} | Inicializando Custom Channels Chat v1.4.4...`);
 
   // Configuração: Lista de canais
   game.settings.register(MODULE_ID, "channelsList", {
@@ -253,46 +253,50 @@ Hooks.on("preUpdateChatMessage", (messageDoc, changes, options, userId) => {
  * Função utilitária para aplicar o tratamento do card da mensagem
  */
 function handleChatMessageRender(messageDoc, html) {
-  const el = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : null);
-  if (!el) return;
+  try {
+    const el = html instanceof HTMLElement ? html : (html && html[0] ? html[0] : null);
+    if (!el) return;
 
-  const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
-  const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, messageDoc?._source || {}, el);
+    const autoRoute = game.settings?.get(MODULE_ID, "autoRouteRolls") ?? true;
+    const isDiceOrDamage = ChannelManager.isDiceOrDamage(messageDoc, messageDoc?._source || {}, el);
 
-  let channel;
-  if (autoRoute && isDiceOrDamage) {
-    // Para qualquer tipo de dado ou dano, força estritamente o canal 'dados'
-    channel = "dados";
-  } else {
-    channel = (typeof messageDoc?.getFlag === "function" ? messageDoc.getFlag(MODULE_ID, "channel") : null)
-      || messageDoc?.flags?.[MODULE_ID]?.channel
-      || (isDiceOrDamage ? "dados" : "geral");
-  }
-  
-  // Atributo data-channel para filtragem CSS O(1) e classe auxiliar
-  if (el.dataset) el.dataset.channel = channel;
-  if (el.setAttribute) el.setAttribute("data-channel", channel);
-  const active = ChannelManager.getActiveChannel();
-  const isVisible = (channel === active);
-
-  if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
-  if (el.style) {
-    if (isVisible) {
-      el.style.removeProperty("display");
+    let channel;
+    if (autoRoute && isDiceOrDamage) {
+      // Para qualquer tipo de dado ou dano, força estritamente o canal 'dados'
+      channel = "dados";
     } else {
-      el.style.setProperty("display", "none", "important");
+      const flagChannel = (typeof messageDoc?.getFlag === "function" ? messageDoc.getFlag(MODULE_ID, "channel") : null)
+        || messageDoc?.flags?.[MODULE_ID]?.channel;
+      channel = flagChannel || (isDiceOrDamage ? "dados" : "geral");
     }
-  }
+    
+    // Atributo data-channel para filtragem CSS O(1) e classe auxiliar
+    if (el.dataset) el.dataset.channel = channel;
+    if (el.setAttribute) el.setAttribute("data-channel", channel);
+    const active = ChannelManager.getActiveChannel();
+    const isVisible = (channel === active);
 
-  // Aplica estilo Discord e imagem apenas para mensagens normais de bate-papo
-  if (!isDiceOrDamage) {
-    ChannelManager.formatDiscordMessage(messageDoc, el);
-    ImageHandler.formatDomMessage(messageDoc, el);
-  } else {
-    // Garante que nenhum elemento de avatar Discord permaneça em card de rolagem/dano
-    const discordAvatar = el.querySelector(".discord-avatar-wrap");
-    if (discordAvatar) discordAvatar.remove();
-    if (el.classList) el.classList.remove("discord-styled-message");
+    if (el.classList) el.classList.toggle("custom-channel-hidden", !isVisible);
+    if (el.style) {
+      if (isVisible) {
+        el.style.removeProperty("display");
+      } else {
+        el.style.setProperty("display", "none", "important");
+      }
+    }
+
+    // Aplica estilo Discord e imagem apenas para mensagens normais de bate-papo
+    if (!isDiceOrDamage) {
+      ChannelManager.formatDiscordMessage(messageDoc, el);
+      ImageHandler.formatDomMessage(messageDoc, el);
+    } else {
+      // Garante que nenhum elemento de avatar Discord permaneça em card de rolagem/dano
+      const discordAvatar = el.querySelector(".discord-avatar-wrap");
+      if (discordAvatar) discordAvatar.remove();
+      if (el.classList) el.classList.remove("discord-styled-message");
+    }
+  } catch (err) {
+    console.warn(`${MODULE_ID} | handleChatMessageRender erro:`, err);
   }
 }
 
@@ -325,7 +329,7 @@ Hooks.on("createChatMessage", (messageDoc, options, userId) => {
   const syncDomElement = () => {
     const messageId = messageDoc.id || messageDoc._id;
     if (!messageId) return;
-    const el = document.querySelector ? document.querySelector(`[data-message-id="${messageId}"], li[data-message-id="${messageId}"]`) : null;
+    const el = document.querySelector ? document.querySelector(`li.chat-message[data-message-id="${messageId}"], [data-message-id="${messageId}"]`) : null;
     if (el) {
       if (el.dataset) el.dataset.channel = channel;
       if (el.setAttribute) el.setAttribute("data-channel", channel);
@@ -379,7 +383,7 @@ Hooks.on("updateChatMessage", (messageDoc, changes, options, userId) => {
   // Localiza e sincroniza o elemento DOM da mensagem se já estiver renderizado no chat
   const messageId = messageDoc.id || messageDoc._id;
   if (messageId) {
-    const el = document.querySelector ? (document.querySelector(`[data-message-id="${messageId}"], li[data-message-id="${messageId}"]`)) : null;
+    const el = document.querySelector ? (document.querySelector(`li.chat-message[data-message-id="${messageId}"], [data-message-id="${messageId}"]`)) : null;
     if (el) {
       if (el.dataset) el.dataset.channel = channel;
       if (el.setAttribute) el.setAttribute("data-channel", channel);

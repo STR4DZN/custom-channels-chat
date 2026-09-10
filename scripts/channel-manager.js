@@ -89,7 +89,7 @@ export class ChannelManager {
       const rollStyle = CONST.CHAT_MESSAGE_STYLES?.ROLL;
       if (rollStyle !== undefined && (messageDoc?.style === rollStyle || data?.style === rollStyle)) return true;
     }
-    if (messageDoc?.type === 5 || data?.type === 5 || messageDoc?.style === 5 || data?.style === 5) return true;
+    if (messageDoc?.type === 5 || data?.type === 5) return true;
 
     // Inspeção de flavor (muito usado em rolagens de dano por fichas ou macros)
     const flavor = data?.flavor || messageDoc?.flavor;
@@ -139,9 +139,9 @@ export class ChannelManager {
     // Dice So Nice (3D dice)
     if (flags["dice-so-nice"] || flags.dsn) {
       const dsn = flags["dice-so-nice"] || flags.dsn;
-      if (typeof dsn === "object") {
-        if (dsn.roll || dsn.dsnShowFormula || dsn.rolls || Object.keys(dsn).length === 0) return true;
-      } else if (dsn) {
+      if (typeof dsn === "object" && dsn !== null) {
+        if (dsn.roll || dsn.dsnShowFormula || dsn.rolls || dsn.formula || dsn.showDice) return true;
+      } else if (dsn === true) {
         return true;
       }
     }
@@ -184,6 +184,7 @@ export class ChannelManager {
     }
 
     return false;
+
   }
 
   /**
@@ -617,11 +618,16 @@ export class ChannelManager {
       if (autoRoute && isDiceOrDamage) {
         channel = "dados";
       } else {
-        channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
-          || msgDoc?.flags?.[this.MODULE_ID]?.channel
-          || el.dataset?.channel
-          || el.getAttribute?.("data-channel")
-          || (isDiceOrDamage ? "dados" : "geral");
+        const flagChannel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+          || msgDoc?.flags?.[this.MODULE_ID]?.channel;
+
+        if (flagChannel) {
+          channel = flagChannel;
+        } else if (msgDoc) {
+          channel = isDiceOrDamage ? "dados" : "geral";
+        } else {
+          channel = el.dataset?.channel || el.getAttribute?.("data-channel") || (isDiceOrDamage ? "dados" : "geral");
+        }
       }
 
       if (el.dataset) el.dataset.channel = channel;
@@ -735,26 +741,15 @@ export class ChannelManager {
 
     if (filterStyle && this.lastFilteredChannel !== active) {
       this.lastFilteredChannel = active;
-      // Regras CSS abrangentes cobrindo variações do Foundry VTT (v12, v13, ApplicationV2, Popouts)
+      // Regras CSS seguras restritas aos containers de mensagens, nunca afetando a barra de canais
       filterStyle.textContent = `
         #chat-log .chat-message:not([data-channel="${active}"]),
         #chat-log .message:not([data-channel="${active}"]),
         .chat-log .chat-message:not([data-channel="${active}"]),
         .chat-log .message:not([data-channel="${active}"]),
-        .chat-message:not([data-channel="${active}"]),
-        .message:not([data-channel="${active}"]),
-        #chat [data-channel]:not([data-channel="${active}"]),
-        [data-tab="chat"] [data-channel]:not([data-channel="${active}"]),
-        .chat-sidebar [data-channel]:not([data-channel="${active}"]),
-        #chat-log [data-channel]:not([data-channel="${active}"]),
-        .chat-log [data-channel]:not([data-channel="${active}"]),
-        .chat-messages [data-channel]:not([data-channel="${active}"]),
-        #chat-popout [data-channel]:not([data-channel="${active}"]),
-        .chat-popout [data-channel]:not([data-channel="${active}"]),
-        li.chat-message[data-channel]:not([data-channel="${active}"]),
-        [data-message-id][data-channel]:not([data-channel="${active}"]),
-        .custom-channel-hidden,
-        li.custom-channel-hidden {
+        .chat-messages .chat-message:not([data-channel="${active}"]),
+        li.chat-message.custom-channel-hidden,
+        .custom-channel-hidden {
           display: none !important;
         }
       `;
@@ -775,9 +770,9 @@ export class ChannelManager {
         if (autoRoute && isDiceOrDamage) {
           channel = "dados";
         } else {
-          channel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
-            || msgDoc?.flags?.[this.MODULE_ID]?.channel
-            || (isDiceOrDamage ? "dados" : "geral");
+          const flagChannel = (typeof msgDoc?.getFlag === "function" ? msgDoc.getFlag(this.MODULE_ID, "channel") : null)
+            || msgDoc?.flags?.[this.MODULE_ID]?.channel;
+          channel = flagChannel || (isDiceOrDamage ? "dados" : "geral");
         }
 
         if (el.dataset) el.dataset.channel = channel;

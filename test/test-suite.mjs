@@ -1003,7 +1003,8 @@ assert(ChannelManager.isDiceOrDamage({ flavor: "Rolagem de Dano: 2d6 Fogo" }) ==
 assert(ChannelManager.isDiceOrDamage({ flavor: "Cura: 2d8+3 PV" }) === true, "Flavor 'Cura' reconhecido");
 assert(ChannelManager.isDiceOrDamage({ flavor: "Acerto Crítico!" }) === true, "Flavor 'Crítico' reconhecido");
 assert(ChannelManager.isDiceOrDamage({ roll: { total: 10 } }) === true, "messageDoc.roll singular reconhecido");
-assert(ChannelManager.isDiceOrDamage({}, { flags: { "dice-so-nice": {} } }) === true, "Flag Dice So Nice (3D dice) reconhecida");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "dice-so-nice": { roll: true } } }) === true, "Flag Dice So Nice (3D dice) reconhecida");
+assert(ChannelManager.isDiceOrDamage({}, { flags: { "dice-so-nice": {} } }) === false, "Flag vazia do Dice So Nice NÃO é classificada como rolagem");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { swade: { roll: {} } } }) === true, "Flag Savage Worlds (swade) reconhecida");
 assert(ChannelManager.isDiceOrDamage({}, { flags: { dnd5e: { messageType: "damage" } } }) === true, "D&D 5e messageType=damage reconhecido");
 
