@@ -1,59 +1,76 @@
-# Custom Channels Chat (Foundry VTT v13 e v12)
+# Chat Media & Image Viewer (Foundry VTT v13 e v12)
 
-Módulo para o **Foundry Virtual Tabletop (v13.351 / v12)** que traz a experiência de bate-papo estilo Discord diretamente para a barra lateral do chat, sem misturar ou quebrar as rolagens de dados e mecânicas da mesa.
+Módulo moderno e leve para o **Foundry Virtual Tabletop (v13.351 / v12)** dedicado ao envio direto, incorporação e visualização de imagens e GIFs no chat, sem interferir na exibição de mensagens e rolagens nativas do Foundry VTT.
 
 ---
 
 ## 🚀 Principais Funcionalidades
 
-1. **Canais e Abas no Chat (#geral, #off-topic, #dados):**
-   - Cria uma barra de canais estilizada no topo da aba de chat, fixada com `sticky` e rolagem horizontal suave para garantir compatibilidade com sidebars estreitas e qualquer resolução de tela.
-   - **Criar novos chats diretamente pela UI:** botão `+` na barra de canais para criar canais instantaneamente sem precisar acessar configurações do mundo.
-   - **Gerenciar/Excluir canais:** o Mestre pode excluir canais criados (com proteção automática para os canais `#geral` e `#dados`).
-   - Sincronização em tempo real via Sockets e World Settings entre Mestre e Jogadores.
-   - Badge indicador de novas mensagens não lidas nos outros canais.
+1. **Envio de Imagens do Computador:**
+   - Botão visível **`Imagem`** posicionado diretamente acima da caixa de mensagem do chat.
+   - Suporte para todos os formatos de imagem e animação comuns (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`, `.bmp`).
+   - Preservação total de GIFs animados (não sofrem recompressão em canvas, mantendo todas as frames).
+   - Otimização inteligente para imagens pesadas (> 250KB) com conversão rápida no cliente para WebP de alta fidelidade.
+   - Upload automático no servidor do Foundry (`[Data]/worlds/<seu-mundo>/chat-uploads/`) com fallback transparente para Base64 caso o usuário não tenha permissão de upload.
 
-2. **Isolamento e Preservação de Rolagens de Dados e Dano:**
-   - Todas as rolagens de dados e cards de dano (sejam manuais com `/r`, pelas fichas de personagem, macros, ou de sistemas como D&D 5e, PF2e, Tormenta20 e módulos como Midi-QOL, Ready Set Roll e Better Rolls) são **roteadas automaticamente para a aba `#dados`**.
-   - Isolamento completo na sidebar: a aba do chat é estritamente ocultada ao navegar para Atores, Cenas, Itens ou qualquer outra aba, prevenindo qualquer sobreposição visual.
-   - As abas de conversa ficam limpas para interpretação e bate-papo, sem perder o histórico nem interferir em módulos como *Dice So Nice* (dados 3D) ou automações de dano.
+2. **Envio por Link / URL de Mídia (GIF / URL):**
+   - Botão dedicado **`GIF / URL`** que abre um modal com campo de endereço e **Live Preview em tempo real**.
+   - Resolução inteligente de links de plataformas populares:
+     - **Tenor:** links diretos de GIFs com detecção e dicas.
+     - **Giphy:** converte links de páginas do Giphy (`giphy.com/gifs/...`) automaticamente para URLs diretas de GIF animado.
+     - **Imgur:** resolução direta de URLs sem extensão.
+     - **Discord CDN, Reddit e URLs diretas:** exibição imediata.
+   - Pressione **Enter** para enviar ou **Esc** para fechar o modal.
 
-3. **Área Dedicada de Mídia (Imagens, GIFs e Links):**
-   - **Barra de Ferramentas de Mídia:** botões dedicados `Imagem` e `GIF / URL` visíveis no painel de envio do chat.
-   - **Modal com Live Preview:** ao clicar em `GIF / URL`, digite ou cole qualquer link e veja a imagem renderizar em tempo real antes de enviar.
-   - **Incorporação Automática de Links:** envie links de imagens diretas (`.png`, `.jpg`, `.gif`, `.webp`), Tenor ou Giphy no chat e eles são convertidos automaticamente em cards visuais.
-   - **Colar da área de transferência (Ctrl+V):** tire um print ou copie uma imagem e pressione `Ctrl+V` em qualquer lugar do chat para enviar.
-   - **Arrastar e Soltar (Drag & Drop):** arraste imagens do seu computador diretamente para a caixa de chat.
-   - **Upload seguro no servidor:** as imagens são salvas em `[Data]/worlds/<seu-mundo>/chat-uploads/` com fallback automático em Base64 otimizado.
-   - **Visualizador Ampliado (Lightbox Responsivo):** clique em qualquer imagem ou GIF para abri-la em um visualizador moderno com fundo translúcido escurecido, perfeitamente adaptado e limitado ao viewport (`max-width: 90vw; max-height: 90vh;`), suporte a tecla Esc, clique fora para fechar e botão de Abrir Original.
+3. **Incorporação Automática de Links no Chat (Auto-Embed):**
+   - Ao colar ou digitar uma URL de imagem ou GIF diretamente no campo de texto normal do chat, a mensagem é renderizada automaticamente como um card visual de mídia.
+   - Se a mensagem contiver texto acompanhado do link, o texto é preservado no cabeçalho e a imagem exibida logo abaixo.
 
-4. **Identidade Real do Usuário (Estilo Discord):**
-   - Conversas de texto usam o avatar e o nome da conta do jogador, garantindo uma conversa fluida sem alterar o token selecionado no mapa.
-   - Compatibilidade completa com Foundry VTT v13 (ApplicationV2) e v12.
+4. **Colar da Área de Transferência (Ctrl + V):**
+   - Copie qualquer imagem da internet, do Discord ou capture um print de tela e pressione **Ctrl + V** com o chat aberto para enviá-la instantaneamente.
+
+5. **Arrastar e Soltar (Drag & Drop):**
+   - Arraste um arquivo de imagem do seu computador e solte sobre a caixa de texto do chat para enviar.
+
+6. **Visualizador Moderno de Imagem (Lightbox Responsivo):**
+   - Clique em qualquer imagem ou GIF no histórico do chat para abri-la em visualização ampliada de alta qualidade.
+   - Fundo escurecido translúcido com desfoque (`backdrop-filter: blur(8px)`).
+   - Perfeitamente contido e centralizado no viewport (`max-width: 92vw; max-height: 92vh;`).
+   - Barra de ferramentas superior com:
+     - **Baixar:** faz download do arquivo da imagem diretamente no seu computador.
+     - **Abrir Original:** abre a imagem em resolução nativa em uma nova aba do navegador.
+     - **Fechar (X) / Esc:** feche rapidamente clicando no X, no fundo da tela ou pressionando a tecla `Escape`.
+
+7. **Compatibilidade Total e Preservação do Chat Nativo:**
+   - 100% compatível com o Foundry VTT v13 (ApplicationV2) e v12.
+   - Nenhuma mensagem, rolagem de dado, sussurro ou card de sistema é ocultado ou alterado.
+   - Compatível com todos os módulos de rolagens 3D (ex: *Dice So Nice*) e sistemas (D&D 5e, Pathfinder 2e, Tormenta20, CoC, etc.).
 
 ---
 
-## 📦 Como Instalar e Testar no Foundry VTT
+## 📦 Como Instalar no Foundry VTT
 
-### Método 1: Instalação Direta pelo Manifest URL (Recomendado)
-1. Abra o Foundry VTT na tela inicial de **Setup** (Gerenciador de Mundos/Sistemas).
-2. Vá na aba **Add-on Modules** (Módulos Adicionais) e clique em **Install Module** (Instalar Módulo).
-3. No campo **Manifest URL** no rodapé da janela, cole o link:
+### Método 1: Instalação pelo Manifest URL (Recomendado)
+1. No menu principal ou na tela de configuração do Foundry VTT, acesse a aba **Add-on Modules** (Módulos Adicionais).
+2. Clique no botão **Install Module** (Instalar Módulo).
+3. No campo **Manifest URL** (no rodapé da janela), cole o endereço:
    ```text
    https://github.com/STR4DZN/custom-channels-chat/releases/latest/download/module.json
    ```
-4. Clique em **Install** e o Foundry baixará e instalará o módulo automaticamente!
+4. Clique em **Install** e aguarde o download.
+5. Inicie seu mundo e ative o módulo em **Gerenciar Módulos**.
 
-### Método 2: Instalação Manual (Pasta Local)
-1. Copie a pasta `custom-channels-chat` para o diretório de dados do Foundry:
-   - No Windows: `%localappdata%\FoundryVTT\Data\modules\custom-channels-chat` (ou o seu diretório de dados configurado).
-2. Inicie o mundo e ative o módulo em **Gerenciar Módulos**.
+### Método 2: Instalação Manual
+1. Baixe o arquivo `module.zip` da última release do repositório.
+2. Extraia o conteúdo na pasta de módulos do seu Foundry VTT:
+   - Windows: `%localappdata%\FoundryVTT\Data\modules\custom-channels-chat`
+3. Reinicie o Foundry VTT e ative o módulo no seu mundo.
 
 ---
 
-## ⚙️ Configurações Disponíveis
+## ⚙️ Configurações do Módulo
 
-No menu **Configurações do Jogo > Opções de Módulos**:
-* **Canais do Chat:** Permite definir a lista de canais separados por vírgula (ex: `geral, narrativa, off-topic, dados`).
-* **Roteamento Automático de Rolagens:** Ativa/desativa o envio automático de rolagens para o canal `#dados`.
-* **Estilo Visual Discord:** Ativa/desativa o layout com avatar arredondado e borda temática nas mensagens de bate-papo.
+No menu **Configurações do Jogo > Opções de Módulos > Chat Media & Image Viewer**:
+* **Incorporação Automática de Mídia:** ativa/desativa a conversão automática de links de imagens/GIFs digitados no chat em cards visuais.
+* **Visualizador de Imagem (Lightbox):** ativa/desativa o visualizador ampliado em tela cheia ao clicar em imagens.
+* **Altura Máxima no Chat (px):** define a altura máxima (de 150px a 600px) dos cards de imagem no chat para evitar poluição visual.

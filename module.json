@@ -1,8 +1,8 @@
 {
   "id": "custom-channels-chat",
-  "title": "Custom Channels Chat",
-  "description": "Sistema de canais estilo Discord (#geral, #off-topic, #dados), envio direto de imagens (Ctrl+V / Anexo) e isolamento automático de rolagens de dados para o Foundry VTT v13.",
-  "version": "1.4.4",
+  "title": "Chat Media & Image Viewer",
+  "description": "Envio direto de imagens e GIFs (Upload, URLs, Tenor/Giphy, Ctrl+V, Drag&Drop) com suporte a visualizador Lightbox moderno e responsivo para o Foundry VTT v13 e v12.",
+  "version": "2.0.0",
   "compatibility": {
     "minimum": "12",
     "verified": "13.351"

@@ -1,16 +1,15 @@
 /**
  * custom-channels-chat | image-handler.js
- * Tratamento avançado de imagens e GIFs (Upload, Ctrl+V, Drag&Drop, URLs de Tenor/Giphy, Lightbox)
- * para Foundry VTT v13 e v12
+ * Módulo especializado em Envio e Visualização de Imagens e GIFs para Foundry VTT v13 e v12
+ * Suporta: Upload de arquivo, Links/URLs (Tenor, Giphy, Imgur, Discord, Web),
+ * Área de Transferência (Ctrl+V), Arrastar e Soltar (Drag & Drop) e Visualizador Lightbox.
  */
-
-import { ChannelManager } from "./channel-manager.js";
 
 export class ImageHandler {
   static MODULE_ID = "custom-channels-chat";
 
   /**
-   * Expressão regular para identificar URLs diretas de imagem ou plataformas suportadas (Tenor, Giphy, Imgur, Discord)
+   * Expressão regular para identificar URLs diretas de imagem ou plataformas de GIF (Tenor, Giphy, Imgur, Discord, etc.)
    */
   static MEDIA_URL_REGEX = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:\?[^\s<>"']*)?|https?:\/\/(?:www\.)?tenor\.com\/view\/[^\s<>"']+|https?:\/\/(?:media|c)\.tenor\.com\/[^\s<>"']+|https?:\/\/(?:www\.)?giphy\.com\/gifs\/[^\s<>"']+|https?:\/\/(?:media|i)\.giphy\.com\/media\/[^\s<>"']+|https?:\/\/(?:i\.)?imgur\.com\/[^\s<>"']+|https?:\/\/cdn\.discordapp\.com\/attachments\/[^\s<>"']+|https?:\/\/images-ext-\d+\.discordapp\.net\/external\/[^\s<>"']+/i;
 
@@ -36,7 +35,7 @@ export class ImageHandler {
     // 3. Captura evento de Arrastar e Soltar (Drag & Drop) de imagens
     this.setupDragDropHandler(root, textarea);
 
-    // 4. Listener global de clique em imagens para Lightbox (ImagePopout)
+    // 4. Listener global de clique em imagens para Lightbox
     this.setupLightboxListener();
   }
 
@@ -56,7 +55,7 @@ export class ImageHandler {
     const attachBtn = document.createElement("button");
     attachBtn.type = "button";
     attachBtn.className = "custom-chat-btn custom-chat-attach-btn";
-    attachBtn.title = "Anexar imagem do computador (ou cole com Ctrl+V)";
+    attachBtn.title = "Anexar imagem ou GIF do computador (ou cole com Ctrl+V)";
     attachBtn.innerHTML = '<i class="fas fa-image"></i> <span>Imagem</span>';
 
     // Input de arquivo invisível
@@ -96,7 +95,7 @@ export class ImageHandler {
     toolbar.appendChild(gifBtn);
     toolbar.appendChild(fileInput);
 
-    // Posiciona a toolbar prioritariamente logo acima da caixa de texto
+    // Posiciona a toolbar logo acima da caixa de texto
     if (textarea) {
       textarea.before(toolbar);
     } else if (chatForm) {
@@ -226,12 +225,15 @@ export class ImageHandler {
   }
 
   /**
-   * Abre o visualizador moderno e responsivo (Lightbox) perfeitamente adaptado ao viewport
+   * Abre o visualizador moderno e responsivo (Lightbox) adaptado ao viewport
    * @param {string} src - URL ou base64 da imagem
    * @param {string} [altText]
    */
   static openLightbox(src, altText = "Visualização de Imagem") {
     if (!src) return null;
+
+    const enableLightbox = game.settings?.get(this.MODULE_ID, "enableLightbox") ?? true;
+    if (!enableLightbox) return null;
 
     // Remove visualizador anterior se existente para evitar sobreposição
     const existing = document.querySelector(".custom-image-lightbox-overlay");
@@ -247,6 +249,9 @@ export class ImageHandler {
       <div class="custom-image-lightbox-backdrop"></div>
       <div class="custom-image-lightbox-content">
         <div class="custom-image-lightbox-toolbar">
+          <a href="#" class="custom-lightbox-btn custom-lightbox-download" title="Baixar imagem no computador">
+            <i class="fas fa-download"></i> <span>Baixar</span>
+          </a>
           <a href="#" target="_blank" rel="noopener noreferrer" class="custom-lightbox-btn custom-lightbox-open-ext" title="Abrir imagem original em nova aba">
             <i class="fas fa-external-link-alt"></i> <span>Abrir Original</span>
           </a>
@@ -266,6 +271,26 @@ export class ImageHandler {
       imgEl.alt = String(altText || "Visualização de Imagem");
     }
 
+    // Botão de Download
+    const downloadBtn = overlay.querySelector(".custom-lightbox-download");
+    if (downloadBtn) {
+      downloadBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          const a = document.createElement("a");
+          a.href = src;
+          a.download = `chat-media-${Date.now()}`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch (err) {
+          window.open(src, "_blank");
+        }
+      });
+    }
+
+    // Botão de Abrir Original em Nova Aba
     const openExtBtn = overlay.querySelector(".custom-lightbox-open-ext");
     if (openExtBtn) {
       openExtBtn.href = src;
@@ -319,7 +344,7 @@ export class ImageHandler {
       });
     }
 
-    // Fechar ao clicar no fundo (fora da imagem e dos botões)
+    // Fechar ao clicar no fundo (fora dos botões e da imagem)
     overlay.addEventListener("click", (e) => {
       const isBtn = e.target.closest?.(".custom-lightbox-btn");
       const isImg = e.target.closest?.(".custom-lightbox-image");
@@ -336,7 +361,6 @@ export class ImageHandler {
     }
     document.body.appendChild(overlay);
 
-    // Animação de entrada suave
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => overlay.classList.add("active"));
     } else {
@@ -357,14 +381,14 @@ export class ImageHandler {
       const target = event.target;
       if (!target) return;
 
-      // Ignora elementos de controle ou avatar
+      // Ignora avatares, dados e botões interativos
       if (target.closest?.(".discord-avatar-wrap, .avatar, .dice-roll, .dice-icon, .message-header, button, a")) {
         return;
       }
 
       // Detecta imagem de chat do módulo ou qualquer imagem dentro do corpo da mensagem
       const isCustomChatImg = target.classList?.contains("discord-chat-img") || target.closest?.(".discord-image-container img");
-      const isChatContentImg = target.tagName === "IMG" && target.closest?.("#chat-log, .chat-log, #chat, #chat-popout");
+      const isChatContentImg = target.tagName === "IMG" && target.closest?.("#chat-log, .chat-log, #chat, #chat-popout, .chat-messages");
 
       const img = isCustomChatImg ? (target.tagName === "IMG" ? target : target.querySelector?.("img")) : (isChatContentImg ? target : null);
 
@@ -374,20 +398,15 @@ export class ImageHandler {
         event.stopImmediatePropagation?.();
         this.openLightbox(img.src, img.alt || "Visualização de Imagem");
       }
-    }, true); // Intercepta na fase de captura (capture: true) antes de qualquer stopPropagation
+    }, true);
   }
 
   /**
    * Abre o modal interativo para envio de link de Imagem ou GIF com Live Preview
    */
   static showImageGifModal() {
-    const activeChannel = ChannelManager.getActiveChannel();
-
     const content = `
       <div class="custom-image-modal-content" style="padding: 4px 0;">
-        <div style="margin-bottom: 10px; font-size: 12px; color: #949ba4;">
-          Enviando para o canal: <span style="color: #5865f2; font-weight: 600;">#${activeChannel}</span>
-        </div>
         <div style="margin-bottom: 8px;">
           <input type="url" id="custom-image-url-field" placeholder="Cole o link da imagem ou GIF (Tenor, Giphy, .png, .gif)..." autofocus style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: #fff; font-size: 13px; box-sizing: border-box;" />
         </div>
@@ -406,13 +425,13 @@ export class ImageHandler {
       buttons: {
         send: {
           icon: '<i class="fas fa-paper-plane"></i>',
-          label: `Enviar para #${activeChannel}`,
+          label: "Enviar para o Chat",
           callback: async (html) => {
             const root = html instanceof HTMLElement ? html : html[0];
             const input = root.querySelector("#custom-image-url-field");
             const url = input?.value?.trim();
             if (url) {
-              await this.sendImageUrl(url, activeChannel);
+              await this.sendImageUrl(url);
             }
           }
         },
@@ -480,14 +499,11 @@ export class ImageHandler {
   }
 
   /**
-   * Envia uma mensagem com URL de imagem ou GIF para o canal especificado
+   * Envia uma mensagem com URL de imagem ou GIF para o chat
    * @param {string} rawUrl 
-   * @param {string} channel 
    */
-  static async sendImageUrl(rawUrl, channel) {
+  static async sendImageUrl(rawUrl) {
     const resolvedUrl = this.resolveMediaUrl(rawUrl.trim());
-    const targetChannel = channel || ChannelManager.getActiveChannel();
-
     const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
 
     await ChatMessage.create({
@@ -498,8 +514,7 @@ export class ImageHandler {
       `,
       speaker: speaker,
       flags: {
-        "custom-channels-chat": {
-          channel: targetChannel,
+        [this.MODULE_ID]: {
           isImage: true
         }
       }
@@ -527,16 +542,17 @@ export class ImageHandler {
     if (!url) return "";
     let cleanUrl = url.trim().replace(/<\/?[^>]+(>|$)/g, "").trim();
 
-    // Resolução para links de página do Giphy (ex: https://giphy.com/gifs/cat-cute-3oKIPnAiaMCws8nOsE)
+    // Giphy (ex: https://giphy.com/gifs/cat-cute-3oKIPnAiaMCws8nOsE)
     const giphyMatch = cleanUrl.match(/giphy\.com\/gifs\/(?:.*-)?([a-zA-Z0-9]+)/i);
     if (giphyMatch && giphyMatch[1] && !cleanUrl.includes("media.giphy.com")) {
       const giphyId = giphyMatch[1];
       return `https://media.giphy.com/media/${giphyId}/giphy.gif`;
     }
 
-    // Links do Imgur sem extensão ou links de galeria
+    // Imgur sem extensão
     const imgurMatch = cleanUrl.match(/^https?:\/\/(?:i\.)?imgur\.com\/(?:gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z]+)?$/i);
-    if (imgurMatch && imgurMatch[1] && !cleanUrl.includes(".")) {
+    const lastPathPart = cleanUrl.split("/").pop().split("?")[0];
+    if (imgurMatch && imgurMatch[1] && !lastPathPart.includes(".")) {
       return `https://i.imgur.com/${imgurMatch[1]}.png`;
     }
 
@@ -553,7 +569,7 @@ export class ImageHandler {
 
     const trimmed = rawContent.trim();
 
-    // Se já estiver embutido com tag de imagem ou container de imagem, não duplica
+    // Se já estiver embutido com container de imagem ou tag <img>, não duplica
     if (trimmed.includes("discord-image-container") || trimmed.includes("<img")) {
       return rawContent;
     }
@@ -561,7 +577,7 @@ export class ImageHandler {
     // Remove tags HTML básicas envoltórias (<p>...</p>) para inspeção de URL pura
     const strippedContent = trimmed.replace(/<\/?[^>]+(>|$)/g, "").trim();
 
-    // 1. Caso a mensagem seja EXATAMENTE uma URL de imagem ou GIF
+    // 1. Mensagem EXATAMENTE de URL de imagem ou GIF
     if (this.isMediaUrl(strippedContent) && !strippedContent.includes(" ")) {
       const resolved = this.resolveMediaUrl(strippedContent);
       return `
@@ -571,7 +587,7 @@ export class ImageHandler {
       `;
     }
 
-    // 2. Caso a mensagem contenha texto acompanhado de um link de imagem/GIF
+    // 2. Mensagem com texto acompanhado de link de imagem/GIF
     const match = trimmed.match(this.MEDIA_URL_REGEX);
     if (match && match[0]) {
       const mediaUrl = match[0];
@@ -594,32 +610,37 @@ export class ImageHandler {
   }
 
   /**
-   * Verifica se o elemento da mensagem no DOM precisa de formatação adicional de imagem
+   * Aplica formatação de container de imagem e altura máxima configurada no DOM da mensagem
    * @param {ChatMessage} messageDoc 
    * @param {HTMLElement} el 
    */
   static formatDomMessage(messageDoc, el) {
     if (!el) return;
 
-    // Apenas formata se for expressamente uma mensagem de imagem do módulo
     const isImageFlag = messageDoc?.getFlag?.(this.MODULE_ID, "isImage");
-    const hasContainer = el.querySelector(".discord-image-container");
-    if (!isImageFlag && !hasContainer) return;
+    const container = el.querySelector(".discord-image-container");
+    const imgInContent = el.querySelector(".message-content img");
 
-    const contentEl = el.querySelector(".message-content");
-    if (!contentEl) return;
+    if (!isImageFlag && !container && !imgInContent) return;
 
-    // Garante classe discord-chat-img e container na imagem
-    const existingImg = contentEl.querySelector("img");
-    if (existingImg && !existingImg.classList.contains("discord-chat-img")) {
-      existingImg.classList.add("discord-chat-img");
-      if (!existingImg.closest(".discord-image-container")) {
+    const maxHeightSetting = game.settings?.get(this.MODULE_ID, "maxImageHeight") || 300;
+
+    // Se houver imagens no conteúdo sem a classe e container adequados
+    const images = el.querySelectorAll(".message-content img");
+    images.forEach(img => {
+      if (!img.classList.contains("discord-chat-img")) {
+        img.classList.add("discord-chat-img");
+      }
+      if (maxHeightSetting) {
+        img.style.maxHeight = `${maxHeightSetting}px`;
+      }
+      if (!img.closest(".discord-image-container")) {
         const wrap = document.createElement("div");
         wrap.className = "discord-image-container";
-        existingImg.before(wrap);
-        wrap.appendChild(existingImg);
+        img.before(wrap);
+        wrap.appendChild(img);
       }
-    }
+    });
   }
 
   /**
@@ -631,7 +652,7 @@ export class ImageHandler {
 
     ui.notifications?.info?.("Processando imagem...");
 
-    // Se for GIF animado, não passa por canvas para preservar a animação
+    // Se for GIF animado, não passa por canvas para preservar todos os quadros e animação
     const isGif = file.type === "image/gif";
     const optimizedFile = isGif ? file : await this.optimizeImage(file);
 
@@ -657,7 +678,7 @@ export class ImageHandler {
       console.warn("custom-channels-chat | Falha no upload para o servidor. Usando fallback Base64.", uploadErr);
     }
 
-    // Fallback: Converte o arquivo otimizado para Base64 se o upload no servidor falhar ou não tiver permissão
+    // Fallback: Converte o arquivo para Base64 se o upload no servidor falhar ou não tiver permissão
     if (!imageSrc) {
       imageSrc = await this.fileToBase64(optimizedFile);
     }
@@ -667,10 +688,8 @@ export class ImageHandler {
       return;
     }
 
-    const currentChannel = ChannelManager.getActiveChannel();
     const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
 
-    // Cria a mensagem no chat com a imagem
     await ChatMessage.create({
       content: `
         <div class="discord-image-container">
@@ -679,8 +698,7 @@ export class ImageHandler {
       `,
       speaker: speaker,
       flags: {
-        "custom-channels-chat": {
-          channel: currentChannel,
+        [this.MODULE_ID]: {
           isImage: true
         }
       }
@@ -707,20 +725,20 @@ export class ImageHandler {
   }
 
   /**
-   * Redimensiona e comprime imagens no cliente antes do upload
+   * Redimensiona e comprime imagens no cliente antes do upload para otimização
    * @param {File} file 
    * @param {number} maxWidth 
    * @param {number} maxHeight 
    * @param {number} quality 
    * @returns {Promise<File>}
    */
-  static async optimizeImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.85) {
-    // Se não for imagem ou for leve (< 200KB), mantém original
-    if (!file.type || !file.type.startsWith("image/") || file.size < 200 * 1024) {
+  static async optimizeImage(file, maxWidth = 1600, maxHeight = 1600, quality = 0.88) {
+    // Se não for imagem ou for leve (< 250KB), mantém original
+    if (!file.type || !file.type.startsWith("image/") || file.size < 250 * 1024) {
       return file;
     }
 
-    // GIFs não devem ser rasterizados em canvas
+    // GIFs nunca devem ser rasterizados em canvas
     if (file.type === "image/gif") {
       return file;
     }
@@ -738,7 +756,7 @@ export class ImageHandler {
         let width = img.width;
         let height = img.height;
 
-        if (width <= maxWidth && height <= maxHeight && file.size < 500 * 1024) {
+        if (width <= maxWidth && height <= maxHeight && file.size < 600 * 1024) {
           return resolve(file);
         }
 
