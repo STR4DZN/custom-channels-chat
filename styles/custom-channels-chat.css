@@ -114,7 +114,7 @@ ol#chat-log {
   transform: translateY(0) !important;
 }
 
-/* Indicador visual de Drag & Drop de imagem */
+/* Indicador visual de Drag & Drop de arquivos */
 .custom-chat-dragover {
   outline: 2px dashed #5865f2 !important;
   outline-offset: -2px !important;
@@ -122,7 +122,7 @@ ol#chat-log {
 }
 
 /* ==========================================================================
-   CARDS DE IMAGEM E GIF NO CORPO DA MENSAGEM
+   MÍDIA E ANEXOS NO CORPO DA MENSAGEM
    ========================================================================== */
 .discord-image-container {
   margin-top: 6px !important;
@@ -138,7 +138,7 @@ ol#chat-log {
 .discord-chat-img {
   display: block !important;
   max-width: 100% !important;
-  max-height: 300px !important;
+  max-height: var(--custom-chat-media-height, 300px) !important;
   border-radius: 6px !important;
   cursor: zoom-in !important;
   object-fit: contain !important;
@@ -150,10 +150,39 @@ ol#chat-log {
   transform: scale(1.01) !important;
 }
 
+.custom-chat-player {
+  display: block;
+  max-width: 100%;
+  max-height: var(--custom-chat-media-height, 300px);
+  object-fit: contain;
+}
+
+.custom-chat-file-link {
+  display: block;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
+}
+
+.discord-image-container [hidden] {
+  display: none !important;
+}
+
+.custom-chat-preview {
+  margin-block: 8px;
+  text-align: center;
+}
+
+.custom-chat-preview > :is(img, video, audio) {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
 .discord-message-text {
   margin: 0 0 4px 0 !important;
   color: #dbdee1 !important;
-  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: pre-line;
 }
 
 /* ==========================================================================

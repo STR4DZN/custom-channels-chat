@@ -1,17 +1,20 @@
 /**
  * custom-channels-chat | image-handler.js
- * Módulo especializado em Envio e Visualização de Imagens e GIFs para Foundry VTT v13 e v12
- * Suporta: Upload de arquivo, Links/URLs (Tenor, Giphy, Imgur, Discord, Web),
+ * Envio e visualização de mídia no chat do Foundry VTT v13 e v12
+ * Suporta imagens, vídeos, áudios e anexos. Upload de arquivo, Links/URLs (Tenor, Giphy, Imgur, Discord, Web),
  * Área de Transferência (Ctrl+V), Arrastar e Soltar (Drag & Drop) e Visualizador Lightbox.
  */
+
+import { describeFile, describeLink, escapeHtml } from "./media-types.js";
 
 export class ImageHandler {
   static MODULE_ID = "custom-channels-chat";
 
-  /**
-   * Expressão regular para identificar URLs diretas de imagem ou plataformas de GIF (Tenor, Giphy, Imgur, Discord, etc.)
-   */
-  static MEDIA_URL_REGEX = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:\?[^\s<>"']*)?|https?:\/\/(?:www\.)?tenor\.com\/view\/[^\s<>"']+|https?:\/\/(?:media|c)\.tenor\.com\/[^\s<>"']+|https?:\/\/(?:www\.)?giphy\.com\/gifs\/[^\s<>"']+|https?:\/\/(?:media|i)\.giphy\.com\/media\/[^\s<>"']+|https?:\/\/(?:i\.)?imgur\.com\/[^\s<>"']+|https?:\/\/cdn\.discordapp\.com\/attachments\/[^\s<>"']+|https?:\/\/images-ext-\d+\.discordapp\.net\/external\/[^\s<>"']+/i;
+  static localize(key, fallback) {
+    const id = `CUSTOM_CHANNELS_CHAT.${key}`;
+    const translated = game.i18n?.localize(id);
+    return translated && translated !== id ? translated : fallback;
+  }
 
   /**
    * Inicializa os listeners e a barra de ações de mídia no ChatLog
@@ -55,20 +58,19 @@ export class ImageHandler {
     const attachBtn = document.createElement("button");
     attachBtn.type = "button";
     attachBtn.className = "custom-chat-btn custom-chat-attach-btn";
-    attachBtn.title = "Anexar imagem ou GIF do computador (ou cole com Ctrl+V)";
-    attachBtn.innerHTML = '<i class="fas fa-image"></i> <span>Imagem</span>';
+    attachBtn.title = this.localize("Buttons.AttachTitle", "Anexar arquivo do computador ou colar com Ctrl+V");
+    attachBtn.innerHTML = `<i class="fas fa-paperclip"></i> <span>${this.localize("Buttons.AttachImage", "Anexar")}</span>`;
 
     // Input de arquivo invisível
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = "image/*";
     fileInput.style.display = "none";
 
     fileInput.addEventListener("change", async (e) => {
       const file = e.target.files?.[0];
       if (file) {
-        await this.processAndSendImage(file);
         fileInput.value = "";
+        await this.processAndSendImage(file);
       }
     });
 
@@ -82,8 +84,8 @@ export class ImageHandler {
     const gifBtn = document.createElement("button");
     gifBtn.type = "button";
     gifBtn.className = "custom-chat-btn custom-chat-gif-btn";
-    gifBtn.title = "Enviar GIF ou Link de Imagem (Tenor, Giphy, web)";
-    gifBtn.innerHTML = '<i class="fas fa-film"></i> <span>GIF / URL</span>';
+    gifBtn.title = this.localize("Buttons.LinkTitle", "Enviar link de mídia ou arquivo");
+    gifBtn.innerHTML = `<i class="fas fa-link"></i> <span>${this.localize("Buttons.SendGif", "Mídia / URL")}</span>`;
 
     gifBtn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -107,100 +109,48 @@ export class ImageHandler {
     }
   }
 
-  /**
-   * Configura o listener de Ctrl+V (Paste) para imagens da área de transferência
-   */
+  /** Captura arquivos da área de transferência sem interferir na colagem de texto. */
   static setupPasteHandler(root, textarea) {
     const handlePaste = async (event) => {
       const clipboard = event.clipboardData || window.clipboardData;
-      if (!clipboard) return;
+      if (!clipboard || event.defaultPrevented) return;
 
-      // Extrai arquivo de imagem da área de transferência
-      let imageFile = null;
-      if (clipboard.files && clipboard.files.length > 0) {
-        for (const file of clipboard.files) {
-          if (file.type && file.type.startsWith("image/")) {
-            imageFile = file;
-            break;
-          }
-        }
-      }
+      const file = clipboard.files?.[0]
+        ?? Array.from(clipboard.items ?? []).find(item => item.kind === "file")?.getAsFile();
+      if (!file) return;
 
-      if (!imageFile && clipboard.items && clipboard.items.length > 0) {
-        for (const item of clipboard.items) {
-          if (item.type && item.type.startsWith("image/")) {
-            imageFile = item.getAsFile();
-            if (imageFile) break;
-          }
-        }
-      }
-
-      if (imageFile) {
-        event.preventDefault();
-        event.stopPropagation();
-        await this.processAndSendImage(imageFile);
-        return;
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      await this.processAndSendImage(file);
     };
 
-    const targets = [textarea, root].filter(Boolean);
-    targets.forEach(target => {
-      if (target.dataset?.customPasteAttached) return;
-      if (target.dataset) target.dataset.customPasteAttached = "true";
+    for (const target of [textarea, root].filter(Boolean)) {
+      if (target.dataset.customPasteAttached) continue;
+      target.dataset.customPasteAttached = "true";
       target.addEventListener("paste", handlePaste);
-    });
+    }
 
-    // Handler global no document para garantir Ctrl+V quando a aba do chat estiver ativa
-    if (typeof document !== "undefined" && !document.body?.dataset?.customGlobalPasteAttached) {
-      if (document.body?.dataset) document.body.dataset.customGlobalPasteAttached = "true";
-      document.addEventListener("paste", async (event) => {
-        const chatElement = document.getElementById("chat");
-        const isChatActive = chatElement && (chatElement.classList.contains("active") || chatElement.offsetParent !== null);
-        if (!isChatActive) return;
-
-        // Se o evento foi no textarea ou alvos diretos, o listener local já executa
-        if (event.target === textarea || targets.includes(event.target)) return;
-
-        const clipboard = event.clipboardData || window.clipboardData;
-        if (!clipboard) return;
-
-        let imageFile = null;
-        if (clipboard.files && clipboard.files.length > 0) {
-          for (const f of clipboard.files) {
-            if (f.type && f.type.startsWith("image/")) {
-              imageFile = f;
-              break;
-            }
-          }
-        }
-        if (!imageFile && clipboard.items) {
-          for (const it of clipboard.items) {
-            if (it.type && it.type.startsWith("image/")) {
-              imageFile = it.getAsFile();
-              if (imageFile) break;
-            }
-          }
-        }
-
-        if (imageFile) {
-          event.preventDefault();
-          event.stopPropagation();
-          await this.processAndSendImage(imageFile);
+    if (!document.body.dataset.customGlobalPasteAttached) {
+      document.body.dataset.customGlobalPasteAttached = "true";
+      document.addEventListener("paste", (event) => {
+        if (event.target?.closest?.("input, textarea, [contenteditable='true']")) return;
+        const chat = document.getElementById("chat");
+        if (chat && (chat.classList.contains("active") || chat.offsetParent !== null)) {
+          return handlePaste(event);
         }
       });
     }
   }
 
-  /**
-   * Configura Drag & Drop para arrastar imagens para o chat
-   */
+  /** Captura apenas arquivos arrastados para o chat. */
   static setupDragDropHandler(root, textarea) {
     const dropArea = textarea || root;
-    if (!dropArea || dropArea.dataset.customDropAttached) return;
+    if (dropArea.dataset.customDropAttached) return;
     dropArea.dataset.customDropAttached = "true";
 
-    dropArea.addEventListener("dragover", (e) => {
-      e.preventDefault();
+    dropArea.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer?.types?.includes("Files")) return;
+      event.preventDefault();
       dropArea.classList.add("custom-chat-dragover");
     });
 
@@ -208,19 +158,14 @@ export class ImageHandler {
       dropArea.classList.remove("custom-chat-dragover");
     });
 
-    dropArea.addEventListener("drop", async (e) => {
-      e.preventDefault();
+    dropArea.addEventListener("drop", async (event) => {
       dropArea.classList.remove("custom-chat-dragover");
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
 
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        for (const file of files) {
-          if (file.type && file.type.startsWith("image/")) {
-            await this.processAndSendImage(file);
-            break;
-          }
-        }
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      await this.processAndSendImage(file);
     });
   }
 
@@ -392,7 +337,7 @@ export class ImageHandler {
 
       const img = isCustomChatImg ? (target.tagName === "IMG" ? target : target.querySelector?.("img")) : (isChatContentImg ? target : null);
 
-      if (img && img.src) {
+      if (img?.src && (game.settings?.get(this.MODULE_ID, "enableLightbox") ?? true)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation?.();
@@ -401,310 +346,273 @@ export class ImageHandler {
     }, true);
   }
 
-  /**
-   * Abre o modal interativo para envio de link de Imagem ou GIF com Live Preview
-   */
+  /** Abre a prévia do mesmo tipo de mídia que será exibido no chat. */
   static showImageGifModal() {
+    const placeholder = this.localize("Modals.SendImagePlaceholder", "Cole o link da mídia ou do arquivo");
+    const help = this.localize("Modals.LinkHelp", "Cole um link direto do Discord, Tenor, Giphy ou de outro site.");
     const content = `
-      <div class="custom-image-modal-content" style="padding: 4px 0;">
-        <div style="margin-bottom: 8px;">
-          <input type="url" id="custom-image-url-field" placeholder="Cole o link da imagem ou GIF (Tenor, Giphy, .png, .gif)..." autofocus style="width: 100%; padding: 8px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; color: #fff; font-size: 13px; box-sizing: border-box;" />
-        </div>
-        <div id="custom-image-preview-container" style="display: none; text-align: center; max-height: 220px; overflow: hidden; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 6px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.08);">
-          <img id="custom-image-preview-element" style="max-height: 200px; max-width: 100%; border-radius: 4px; object-fit: contain;" alt="Pré-visualização" />
-        </div>
-        <p id="custom-image-modal-hint" style="font-size: 11px; color: #80848e; margin: 0;">
-          <i class="fas fa-info-circle"></i> Suporta links diretos (.png, .jpg, .gif, .webp), Giphy, Imgur e Tenor.
-        </p>
+      <div class="custom-image-modal-content">
+        <input type="url" id="custom-image-url-field" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" autofocus>
+        <div id="custom-image-preview-container" class="custom-chat-preview" hidden></div>
+        <p id="custom-image-modal-hint">${escapeHtml(help)}</p>
       </div>
     `;
 
-    const dialog = new Dialog({
-      title: "Enviar Imagem ou GIF",
-      content: content,
+    new Dialog({
+      title: this.localize("Modals.SendImageTitle", "Enviar mídia ou arquivo"),
+      content,
       buttons: {
         send: {
           icon: '<i class="fas fa-paper-plane"></i>',
-          label: "Enviar para o Chat",
-          callback: async (html) => {
+          label: this.localize("Modals.Send", "Enviar para o chat"),
+          callback: (html) => {
             const root = html instanceof HTMLElement ? html : html[0];
-            const input = root.querySelector("#custom-image-url-field");
-            const url = input?.value?.trim();
-            if (url) {
-              await this.sendImageUrl(url);
-            }
+            return this.sendImageUrl(root.querySelector("#custom-image-url-field").value);
           }
         },
         cancel: {
           icon: '<i class="fas fa-times"></i>',
-          label: "Cancelar"
+          label: this.localize("Modals.Cancel", "Cancelar")
         }
       },
       default: "send",
       render: (html) => {
         const root = html instanceof HTMLElement ? html : html[0];
         const input = root.querySelector("#custom-image-url-field");
-        const previewContainer = root.querySelector("#custom-image-preview-container");
-        const previewImg = root.querySelector("#custom-image-preview-element");
+        const preview = root.querySelector("#custom-image-preview-container");
         const hint = root.querySelector("#custom-image-modal-hint");
 
-        if (!input || !previewContainer || !previewImg) return;
+        input.addEventListener("input", () => {
+          const source = input.value.trim();
+          const item = describeLink(source, { explicit: true });
+          preview.replaceChildren();
+          preview.hidden = true;
+          hint.textContent = help;
+          if (!source) return;
 
-        const updatePreview = () => {
-          const rawUrl = input.value.trim();
-          if (!rawUrl) {
-            previewContainer.style.display = "none";
-            if (hint) hint.innerHTML = '<i class="fas fa-info-circle"></i> Suporta links diretos (.png, .jpg, .gif, .webp), Giphy, Imgur e Tenor.';
+          if (!item) {
+            hint.textContent = this.localize("Modals.InvalidLink", "Use um endereço HTTP ou HTTPS válido.");
+            return;
+          }
+          if (item.kind === "file") {
+            hint.textContent = item.tenorPage
+              ? this.localize("Modals.TenorPage", "Para reproduzir no chat, copie o endereço direto do GIF ou vídeo do Tenor.")
+              : this.localize("Modals.FileLink", "O arquivo será enviado como link.");
             return;
           }
 
-          if (rawUrl.includes("tenor.com/view/")) {
-            previewContainer.style.display = "none";
-            if (hint) {
-              hint.innerHTML = '<span style="color: #faa61a;"><i class="fas fa-exclamation-circle"></i> Dica do Tenor: clique com o botão direito no GIF e escolha "Copiar endereço da imagem" para o link direto (.gif).</span>';
-            }
-            return;
-          }
+          const media = this.createPreview(item);
+          media.addEventListener("error", () => {
+            if (media.parentElement !== preview) return;
+            preview.hidden = true;
+            hint.textContent = this.localize("Modals.PreviewError", "Sem prévia. Confira se o link ainda funciona ou envie como link.");
+          }, { once: true });
+          preview.appendChild(media);
+          preview.hidden = false;
+        });
 
-          if (ImageHandler.isMediaUrl(rawUrl)) {
-            const resolved = ImageHandler.resolveMediaUrl(rawUrl);
-            previewImg.onload = () => {
-              previewContainer.style.display = "block";
-              if (hint) hint.innerHTML = '<span style="color: #57f287;"><i class="fas fa-check-circle"></i> Imagem pronta para envio!</span>';
-            };
-            previewImg.onerror = () => {
-              previewContainer.style.display = "none";
-              if (hint) hint.innerHTML = '<span style="color: #f23f43;"><i class="fas fa-times-circle"></i> Não foi possível carregar a pré-visualização. Certifique-se de que é um link direto de imagem.</span>';
-            };
-            previewImg.src = resolved;
-          } else {
-            previewContainer.style.display = "none";
-            if (hint) hint.innerHTML = '<span style="color: #f23f43;"><i class="fas fa-times-circle"></i> URL de imagem inválida ou não reconhecida.</span>';
-          }
-        };
-
-        input.addEventListener("input", updatePreview);
-        input.addEventListener("paste", () => setTimeout(updatePreview, 50));
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const btn = root.querySelector('.dialog-button.send');
-            if (btn) btn.click();
+        input.addEventListener("keydown", event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            root.querySelector(".dialog-button.send")?.click();
           }
         });
       }
-    });
-
-    dialog.render(true);
+    }).render(true);
   }
 
-  /**
-   * Envia uma mensagem com URL de imagem ou GIF para o chat
-   * @param {string} rawUrl 
-   */
   static async sendImageUrl(rawUrl) {
-    const resolvedUrl = this.resolveMediaUrl(rawUrl.trim());
+    const item = describeLink(rawUrl?.trim(), { explicit: true });
+    if (!item) {
+      ui.notifications?.warn?.(this.localize("Modals.InvalidLink", "Use um endereço HTTP ou HTTPS válido."));
+      return;
+    }
+
+    await this.sendMedia(item);
+  }
+
+  static async sendMedia(item) {
     const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
-
     await ChatMessage.create({
-      content: `
-        <div class="discord-image-container">
-          <img src="${resolvedUrl}" class="discord-chat-img" alt="GIF ou Imagem" loading="lazy" />
-        </div>
-      `,
-      speaker: speaker,
-      flags: {
-        [this.MODULE_ID]: {
-          isImage: true
-        }
-      }
+      content: this.mediaCard(item),
+      speaker,
+      flags: { [this.MODULE_ID]: { isImage: item.kind === "image" } }
     });
-
-    ui.notifications?.info?.("Imagem enviada com sucesso!");
+    ui.notifications?.info?.(this.localize("Notifications.UploadSuccess", "Arquivo enviado."));
   }
 
-  /**
-   * Verifica se a string informada é uma URL de imagem ou plataforma de GIF
-   * @param {string} str 
-   * @returns {boolean}
-   */
-  static isMediaUrl(str) {
-    if (!str || typeof str !== "string") return false;
-    return this.MEDIA_URL_REGEX.test(str.trim());
+  static isMediaUrl(source) {
+    return typeof source === "string" && !!describeLink(source.trim());
   }
 
-  /**
-   * Resolve e formata links de plataformas populares (Giphy, Tenor, Imgur, etc.) para URLs de mídia utilizáveis
-   * @param {string} url 
-   * @returns {string}
-   */
-  static resolveMediaUrl(url) {
-    if (!url) return "";
-    let cleanUrl = url.trim().replace(/<\/?[^>]+(>|$)/g, "").trim();
+  static resolveMediaUrl(source) {
+    return describeLink(source?.trim(), { explicit: true })?.src ?? "";
+  }
 
-    // Giphy (ex: https://giphy.com/gifs/cat-cute-3oKIPnAiaMCws8nOsE)
-    const giphyMatch = cleanUrl.match(/giphy\.com\/gifs\/(?:.*-)?([a-zA-Z0-9]+)/i);
-    if (giphyMatch && giphyMatch[1] && !cleanUrl.includes("media.giphy.com")) {
-      const giphyId = giphyMatch[1];
-      return `https://media.giphy.com/media/${giphyId}/giphy.gif`;
+  static mediaCard(item) {
+    const src = escapeHtml(item.src);
+    const name = escapeHtml(item.name);
+    const image = item.kind === "image"
+      ? `<img src="${src}" class="discord-chat-img" alt="${name}" loading="lazy">`
+      : "";
+    const link = item.src.startsWith("data:") ? ""
+      : `<a class="custom-chat-file-link" href="${src}" data-media-kind="${item.kind}"${item.loop ? ' data-media-loop="true"' : ''} target="_blank" rel="noopener noreferrer">${name}</a>`;
+    return `<div class="discord-image-container">${image}${link}</div>`;
+  }
+
+  static createPreview({ kind, src, name, loop }) {
+    const media = document.createElement(kind === "image" ? "img" : kind);
+    if (kind === "image") {
+      media.alt = name;
+    } else {
+      media.controls = true;
+      media.preload = "metadata";
+      media.setAttribute("aria-label", name);
+      if (kind === "video") {
+        media.playsInline = true;
+        media.loop = loop;
+        media.defaultMuted = loop;
+        media.muted = loop;
+        media.autoplay = loop;
+      }
     }
-
-    // Imgur sem extensão
-    const imgurMatch = cleanUrl.match(/^https?:\/\/(?:i\.)?imgur\.com\/(?:gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z]+)?$/i);
-    const lastPathPart = cleanUrl.split("/").pop().split("?")[0];
-    if (imgurMatch && imgurMatch[1] && !lastPathPart.includes(".")) {
-      return `https://i.imgur.com/${imgurMatch[1]}.png`;
-    }
-
-    return cleanUrl;
+    media.src = src;
+    return media;
   }
 
   /**
-   * Processa o texto da mensagem antes do salvamento e embuti imagens/GIFs automaticamente
-   * @param {string} rawContent 
-   * @returns {string}
+   * Incorpora links de mensagens de texto. Cards e conteúdo rico passam pelo Foundry.
    */
   static processMessageContent(rawContent) {
-    if (!rawContent || typeof rawContent !== "string") return rawContent;
+    if (typeof rawContent !== "string" || !rawContent) return rawContent;
 
-    const trimmed = rawContent.trim();
-
-    // Se já estiver embutido com container de imagem ou tag <img>, não duplica
-    if (trimmed.includes("discord-image-container") || trimmed.includes("<img")) {
-      return rawContent;
+    let content = rawContent;
+    if (/<[a-z/!]/i.test(content)) {
+      const wrapper = content.trim().match(/^<p>([^<>]*)<\/p>$/i);
+      if (!wrapper) return rawContent;
+      const decoder = document.createElement("textarea");
+      decoder.innerHTML = wrapper[1];
+      content = decoder.value;
     }
 
-    // Remove tags HTML básicas envoltórias (<p>...</p>) para inspeção de URL pura
-    const strippedContent = trimmed.replace(/<\/?[^>]+(>|$)/g, "").trim();
+    const cards = [];
+    const body = content.replace(/https?:\/\/[^\s<>"']+/gi, match => {
+      // Mantém pontuação do texto e parênteses que fazem parte do endereço.
+      let source = match.replace(/[.,;!?]+$/, "");
+      for (const [opening, closing] of [["(", ")"], ["[", "]"]]) {
+        while (source.endsWith(closing) && source.split(closing).length > source.split(opening).length) {
+          source = source.slice(0, -1);
+        }
+      }
+      const item = describeLink(source);
+      if (!item) return match;
+      cards.push(this.mediaCard(item));
+      return match.slice(source.length);
+    }).trim();
 
-    // 1. Mensagem EXATAMENTE de URL de imagem ou GIF
-    if (this.isMediaUrl(strippedContent) && !strippedContent.includes(" ")) {
-      const resolved = this.resolveMediaUrl(strippedContent);
-      return `
-        <div class="discord-image-container">
-          <img src="${resolved}" class="discord-chat-img" alt="Imagem enviada" loading="lazy" />
-        </div>
-      `;
-    }
-
-    // 2. Mensagem com texto acompanhado de link de imagem/GIF
-    const match = trimmed.match(this.MEDIA_URL_REGEX);
-    if (match && match[0]) {
-      const mediaUrl = match[0];
-      const resolved = this.resolveMediaUrl(mediaUrl);
-
-      // Remove a URL e extrai texto limpo
-      const textWithoutUrl = trimmed.replace(mediaUrl, "").trim();
-      const cleanText = textWithoutUrl.replace(/<\/?[^>]+(>|$)/g, "").trim();
-      const textPart = cleanText ? `<p class="discord-message-text">${cleanText}</p>` : "";
-
-      return `
-        ${textPart}
-        <div class="discord-image-container">
-          <img src="${resolved}" class="discord-chat-img" alt="Imagem enviada" loading="lazy" />
-        </div>
-      `;
-    }
-
-    return rawContent;
+    if (!cards.length) return rawContent;
+    const text = body ? `<p class="discord-message-text">${escapeHtml(body)}</p>` : "";
+    return text + cards.join("");
   }
 
   /**
-   * Aplica formatação de container de imagem e altura máxima configurada no DOM da mensagem
-   * @param {ChatMessage} messageDoc 
-   * @param {HTMLElement} el 
+   * Mantém o link original no histórico e cria os leitores na hora de renderizar.
    */
   static formatDomMessage(messageDoc, el) {
-    if (!el) return;
+    const content = el?.querySelector(".message-content");
+    if (!content) return;
 
-    const isImageFlag = messageDoc?.getFlag?.(this.MODULE_ID, "isImage");
-    const container = el.querySelector(".discord-image-container");
-    const imgInContent = el.querySelector(".message-content img");
-
-    if (!isImageFlag && !container && !imgInContent) return;
-
-    const maxHeightSetting = game.settings?.get(this.MODULE_ID, "maxImageHeight") || 300;
-
-    // Se houver imagens no conteúdo sem a classe e container adequados
-    const images = el.querySelectorAll(".message-content img");
-    images.forEach(img => {
-      if (!img.classList.contains("discord-chat-img")) {
-        img.classList.add("discord-chat-img");
+    const maxHeight = game.settings?.get(this.MODULE_ID, "maxImageHeight") || 300;
+    for (const img of content.querySelectorAll("img")) {
+      const container = img.closest(".discord-image-container");
+      const item = container && describeLink(img.getAttribute("src") ?? "");
+      // Versões anteriores salvaram MP4 do Discord e outros anexos como imagens.
+      if (item && item.kind !== "image" && !container.querySelector(".custom-chat-file-link")) {
+        const link = document.createElement("a");
+        link.className = "custom-chat-file-link";
+        link.href = item.src;
+        link.textContent = item.name;
+        if (item.loop) link.dataset.mediaLoop = "true";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        img.replaceWith(link);
+        continue;
       }
-      if (maxHeightSetting) {
-        img.style.maxHeight = `${maxHeightSetting}px`;
-      }
-      if (!img.closest(".discord-image-container")) {
+
+      img.classList.add("discord-chat-img");
+      img.style.setProperty("--custom-chat-media-height", `${maxHeight}px`);
+      if (!container) {
         const wrap = document.createElement("div");
         wrap.className = "discord-image-container";
         img.before(wrap);
         wrap.appendChild(img);
       }
-    });
+    }
+
+    for (const link of content.querySelectorAll(".discord-image-container .custom-chat-file-link")) {
+      if (link.dataset.previewBound) continue;
+      link.dataset.previewBound = "true";
+      const container = link.closest(".discord-image-container");
+      const item = link.hasAttribute("href") && describeLink(link.href, { explicit: true });
+      if (!item) continue;
+
+      const kind = link.dataset.mediaKind ?? item.kind;
+      let media = container.querySelector("img");
+      if (!media && ["image", "video", "audio"].includes(kind)) {
+        media = this.createPreview({ ...item, kind, loop: item.loop || link.dataset.mediaLoop === "true" });
+        media.className = kind === "image" ? "discord-chat-img" : "custom-chat-player";
+        media.style.setProperty("--custom-chat-media-height", `${maxHeight}px`);
+        link.before(media);
+      }
+      if (!media) continue;
+
+      const showLink = () => {
+        media.hidden = true;
+        link.hidden = false;
+      };
+      link.hidden = true;
+      media.addEventListener("error", showLink, { once: true });
+      if (media.error || (media.tagName === "IMG" && media.complete && !media.naturalWidth)) showLink();
+    }
   }
 
-  /**
-   * Processa o arquivo da imagem e envia para o chat
-   * @param {File} file 
-   */
   static async processAndSendImage(file) {
     if (!file) return;
 
-    ui.notifications?.info?.("Processando imagem...");
-
-    // Se for GIF animado, não passa por canvas para preservar todos os quadros e animação
-    const isGif = file.type === "image/gif";
-    const optimizedFile = isGif ? file : await this.optimizeImage(file);
-
-    let imageSrc = null;
-
-    // Tenta upload no servidor do Foundry se o usuário tiver permissão
+    ui.notifications?.info?.(this.localize("Notifications.UploadingImage", "Processando arquivo..."));
     try {
-      const hasUploadPerm = game.user?.isGM || (typeof game.user?.can === "function" && game.user.can("FILES_UPLOAD"));
-      if (hasUploadPerm && typeof FilePicker !== "undefined" && game.world?.id) {
-        const uploadDir = `worlds/${game.world.id}/chat-uploads`;
+      const item = describeFile(file);
+      const upload = item.kind === "image" ? await this.optimizeImage(file) : file;
+      const hasUploadPerm = game.user?.isGM || game.user?.can?.("FILES_UPLOAD");
+      const picker = globalThis.foundry?.applications?.apps?.FilePicker ?? globalThis.FilePicker;
+      let src;
+      if (hasUploadPerm && picker && game.world?.id) {
+        const directory = `worlds/${game.world.id}/chat-uploads`;
         try {
-          await FilePicker.createDirectory("data", uploadDir);
-        } catch (dirErr) {
-          // Diretório já pode existir
+          await picker.createDirectory("data", directory);
+        } catch {
+          // O diretório pode já existir. O upload informa se ainda houver um erro.
         }
 
-        const response = await FilePicker.upload("data", uploadDir, optimizedFile, {}, { notify: false });
-        if (response && response.path) {
-          imageSrc = response.path;
-        }
-      }
-    } catch (uploadErr) {
-      console.warn("custom-channels-chat | Falha no upload para o servidor. Usando fallback Base64.", uploadErr);
-    }
-
-    // Fallback: Converte o arquivo para Base64 se o upload no servidor falhar ou não tiver permissão
-    if (!imageSrc) {
-      imageSrc = await this.fileToBase64(optimizedFile);
-    }
-
-    if (!imageSrc) {
-      ui.notifications?.error?.("Não foi possível processar a imagem selecionada.");
-      return;
-    }
-
-    const speaker = typeof ChatMessage.getSpeaker === "function" ? ChatMessage.getSpeaker() : { alias: game.user?.name || "Usuário" };
-
-    await ChatMessage.create({
-      content: `
-        <div class="discord-image-container">
-          <img src="${imageSrc}" class="discord-chat-img" alt="Imagem enviada" loading="lazy" />
-        </div>
-      `,
-      speaker: speaker,
-      flags: {
-        [this.MODULE_ID]: {
-          isImage: true
+        try {
+          src = (await picker.upload("data", directory, upload, {}, { notify: false }))?.path;
+        } catch (error) {
+          console.warn("custom-channels-chat | Falha no upload.", error);
         }
       }
-    });
 
-    ui.notifications?.info?.("Imagem enviada com sucesso!");
+      // Mantém o fluxo de colar imagens para jogadores sem permissão de upload.
+      if (!src && item.kind === "image") src = await this.fileToBase64(upload);
+      if (!src) {
+        ui.notifications?.error?.(this.localize("Notifications.FileUploadError", "O Foundry não aceitou o upload. Confira o formato e a permissão ou envie um link."));
+        return;
+      }
+
+      await this.sendMedia({ ...item, src });
+    } catch (error) {
+      console.warn("custom-channels-chat | Falha no envio.", error);
+      ui.notifications?.error?.(this.localize("Notifications.UploadError", "Não foi possível enviar o arquivo."));
+    }
   }
 
   /**
@@ -733,13 +641,8 @@ export class ImageHandler {
    * @returns {Promise<File>}
    */
   static async optimizeImage(file, maxWidth = 1600, maxHeight = 1600, quality = 0.88) {
-    // Se não for imagem ou for leve (< 250KB), mantém original
-    if (!file.type || !file.type.startsWith("image/") || file.size < 250 * 1024) {
-      return file;
-    }
-
-    // GIFs nunca devem ser rasterizados em canvas
-    if (file.type === "image/gif") {
+    // Converte apenas formatos estáticos para preservar animações, vetores e transparência.
+    if (!["image/jpeg", "image/bmp"].includes(file.type) || file.size < 250 * 1024) {
       return file;
     }
 

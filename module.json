@@ -1,8 +1,8 @@
 {
   "id": "custom-channels-chat",
   "title": "Chat Media & Image Viewer",
-  "description": "Envio direto de imagens e GIFs (Upload, URLs, Tenor/Giphy, Ctrl+V, Drag&Drop) com suporte a visualizador Lightbox moderno e responsivo para o Foundry VTT v13 e v12.",
-  "version": "2.0.0",
+  "description": "Envio de imagens, GIFs, vídeos, áudio e arquivos no chat do Foundry VTT v13 e v12, com suporte a links do Discord, upload, colagem, arrastar e soltar e visualizador de imagens.",
+  "version": "2.1.0",
   "compatibility": {
     "minimum": "12",
     "verified": "13.351"

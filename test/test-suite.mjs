@@ -1,5 +1,5 @@
 /**
- * Suite de Testes Automatizados para Chat Media & Image Viewer v2.0.0
+ * Suite de Testes Automatizados para Chat Media & Image Viewer
  * Valida: Processamento de Mídia, Regex, Resoluções de URL, Modal, Lightbox,
  * Otimizações de Imagem, Listeners e Limpeza Total de Canais.
  */
@@ -330,7 +330,7 @@ function assert(condition, message) {
 }
 
 async function runAllTests() {
-  console.log("Iniciando testes do Chat Media & Image Viewer v2.0.0...");
+  console.log("Iniciando testes do Chat Media & Image Viewer...");
 
   // --------------------------------------------------------------------------
   // GRUPO 1: MEDIA_URL_REGEX E RESOLUÇÃO DE URLs
@@ -354,7 +354,12 @@ async function runAllTests() {
     "https://imgur.com/gallery/ABC123",
     "https://i.imgur.com/ABC123.png",
     "https://cdn.discordapp.com/attachments/123456789/987654321/test.png",
-    "https://images-ext-1.discordapp.net/external/xyz/test.gif"
+    "https://images-ext-1.discordapp.net/external/xyz/test.gif",
+    "https://media.discordapp.net/external/key/https/media.tenor.com/test/tenor.gif?format=mp4",
+    "https://site.com/video.mp4",
+    "https://site.com/audio.ogg",
+    "https://example.com/document.pdf",
+    "https://example.com/archive.zip"
   ];
 
   for (const url of validMediaUrls) {
@@ -367,8 +372,10 @@ async function runAllTests() {
     "https://github.com/STR4DZN/custom-channels-chat",
     "/r 1d20 + 5",
     "[[/r 2d6 + 3]]",
-    "http://example.com/document.pdf",
-    "https://site.com/video.mp4",
+    "https://example.com/welcome?next=https://example.com/video.mp4",
+    "https://example.com/video.mp4.exe",
+    "https://imgur.com.evil.example/abc123",
+    "javascript:alert(1)",
     ""
   ];
 
@@ -404,6 +411,16 @@ async function runAllTests() {
   assert(textWithUrl.includes("discord-image-container"), "Texto com URL deve conter container de imagem");
   assert(textWithUrl.includes("Olha esse monstro incrível"), "Texto original deve ser preservado");
 
+  const discordClip = "https://media.discordapp.net/external/key/https/media.tenor.com/test/tenor.gif?format=mp4&ex=abc&hm=def";
+  const multiMedia = ImageHandler.processMessageContent(`Confira ${discordClip} e https://example.com/audio.mp3.`);
+  assert(multiMedia.includes('data-media-kind="video" data-media-loop="true"'), "MP4 do proxy Discord deve tocar como GIF");
+  assert(multiMedia.includes("format=mp4&amp;ex=abc&amp;hm=def"), "Deve preservar a assinatura e os parâmetros da URL");
+  assert(multiMedia.includes('data-media-kind="audio"'), "A mesma mensagem pode incluir áudio");
+  assert(multiMedia.includes("Confira") && multiMedia.includes(" e "), "A legenda deve ser preservada");
+  assert(ImageHandler.processMessageContent("https://example.com/file.zip").includes('data-media-kind="file"'), "ZIP deve virar link de arquivo");
+  const richContent = '<p>Veja <a href="https://example.com/video.mp4">a referência</a></p>';
+  assert(ImageHandler.processMessageContent(richContent) === richContent, "Formatação e links manuais devem ser mantidos");
+
   // Mensagem normal
   const normalText = "Apenas uma conversa entre personagens.";
   assert(ImageHandler.processMessageContent(normalText) === normalText, "Texto normal não deve ser alterado");
@@ -416,6 +433,28 @@ async function runAllTests() {
   assert(globalThis.ChatMessage.lastCreated.flags["custom-channels-chat"].isImage === true, "Deve definir flag isImage: true");
   assert(!globalThis.ChatMessage.lastCreated.flags["custom-channels-chat"].channel, "NÃO deve haver flag de canal no envio de imagem");
 
+  await ImageHandler.sendImageUrl("https://i.imgur.com/abc123.gifv");
+  assert(ChatMessage.lastCreated.content.includes("https://i.imgur.com/abc123.mp4"), "Links Imgur GIFV devem usar MP4 direto");
+  assert(ChatMessage.lastCreated.content.includes('data-media-loop="true"'), "GIFV deve manter loop depois da conversão");
+  const lastSent = ChatMessage.lastCreated;
+  await ImageHandler.sendImageUrl("javascript:alert(1)");
+  assert(ChatMessage.lastCreated === lastSent, "Protocolos inválidos não devem enviar mensagens");
+
+  const uploadFiles = [
+    { name: "clip.mp4", type: "", kind: "video" },
+    { name: "trilha.wav", type: "application/octet-stream", kind: "audio" },
+    { name: "handout.pdf", type: "application/pdf", kind: "file" }
+  ];
+  globalThis.FilePicker = {
+    createDirectory: async () => {},
+    upload: async (_source, dir, file) => ({ path: `${dir}/${file.name}` })
+  };
+  for (const file of uploadFiles) {
+    await ImageHandler.processAndSendImage(file);
+    assert(ChatMessage.lastCreated.content.includes(`data-media-kind="${file.kind}"`), `Upload deve reconhecer ${file.name}`);
+  }
+  delete globalThis.FilePicker;
+
   // --------------------------------------------------------------------------
   // GRUPO 4: OTIMIZAÇÃO DE IMAGEM (GIFs preservados, compressão WebP)
   // --------------------------------------------------------------------------
@@ -426,6 +465,9 @@ async function runAllTests() {
   const mockSmallImage = { type: "image/png", size: 100 * 1024, name: "small.png" };
   const optimizedSmall = await ImageHandler.optimizeImage(mockSmallImage);
   assert(optimizedSmall === mockSmallImage, "Imagens leves (<250KB) não precisam de compressão");
+
+  const animatedWebp = { type: "image/webp", size: 3 * 1024 * 1024, name: "dance.webp" };
+  assert(await ImageHandler.optimizeImage(animatedWebp) === animatedWebp, "WebP animado deve manter o arquivo original");
 
   // --------------------------------------------------------------------------
   // GRUPO 5: VISUALIZADOR LIGHTBOX
@@ -488,7 +530,7 @@ async function runAllTests() {
 
   const moduleJsonRaw = fs.readFileSync(path.join(__dirname, "../module.json"), "utf8");
   const moduleJson = JSON.parse(moduleJsonRaw);
-  assert(moduleJson.version === "2.0.0", "module.json deve ter a versão 2.0.0");
+  assert(moduleJson.version === "2.1.0", "module.json deve ter a versão 2.1.0");
   assert(moduleJson.title === "Chat Media & Image Viewer", "module.json deve ter o novo título Chat Media & Image Viewer");
 
   console.log(`\n========================================`);

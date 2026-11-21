@@ -1,7 +1,7 @@
 /**
  * custom-channels-chat | main.js
  * Ponto de entrada do módulo para Foundry VTT v13 e v12
- * Foco exclusivo em envio e visualização de imagens/GIFs (Upload, URL, Ctrl+V, Drag&Drop e Lightbox)
+ * Envio e visualização de mídia e arquivos (Upload, URL, Ctrl+V, Drag&Drop e Lightbox)
  */
 
 import { ImageHandler } from "./image-handler.js";
@@ -9,9 +9,9 @@ import { ImageHandler } from "./image-handler.js";
 const MODULE_ID = "custom-channels-chat";
 
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Inicializando Chat Media & Image Viewer v2.0.0...`);
+  console.log(`${MODULE_ID} | Inicializando Chat Media & Image Viewer...`);
 
-  // Configuração: Incorporação automática de links de imagem/GIF
+  // Configuração: Incorporação automática de links de mídia
   game.settings.register(MODULE_ID, "autoEmbedUrls", {
     name: "CUSTOM_CHANNELS_CHAT.Settings.AutoEmbedUrls.Name",
     hint: "CUSTOM_CHANNELS_CHAT.Settings.AutoEmbedUrls.Hint",
@@ -31,7 +31,7 @@ Hooks.once("init", () => {
     default: true
   });
 
-  // Configuração: Altura máxima das imagens no chat
+  // Configuração: Altura máxima das prévias no chat
   game.settings.register(MODULE_ID, "maxImageHeight", {
     name: "CUSTOM_CHANNELS_CHAT.Settings.MaxImageHeight.Name",
     hint: "CUSTOM_CHANNELS_CHAT.Settings.MaxImageHeight.Hint",
@@ -149,7 +149,7 @@ Hooks.on("renderImagePopout", (app, html, data) => {
 
 /**
  * Hook disparado antes de qualquer mensagem ser gravada no banco
- * Incorpora URLs de imagem ou GIF automaticamente quando habilitado
+ * Incorpora links diretos de mídia automaticamente quando habilitado
  */
 Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
   const autoEmbed = game.settings?.get(MODULE_ID, "autoEmbedUrls") ?? true;
@@ -167,15 +167,9 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
 
   const processedContent = ImageHandler.processMessageContent(rawContent);
   if (processedContent && processedContent !== rawContent) {
-    const updates = {
-      content: processedContent,
-      [`flags.${MODULE_ID}.isImage`]: true,
-      flags: {
-        [MODULE_ID]: {
-          isImage: true
-        }
-      }
-    };
+    const isImage = processedContent.includes("<img ");
+    const updates = { content: processedContent };
+    if (isImage) updates[`flags.${MODULE_ID}.isImage`] = true;
 
     if (typeof messageDoc.updateSource === "function") {
       try {
@@ -187,9 +181,11 @@ Hooks.on("preCreateChatMessage", (messageDoc, createData, options, userId) => {
 
     if (createData && typeof createData === "object") {
       createData.content = processedContent;
-      createData.flags = createData.flags || {};
-      createData.flags[MODULE_ID] = createData.flags[MODULE_ID] || {};
-      createData.flags[MODULE_ID].isImage = true;
+      if (isImage) {
+        createData.flags ??= {};
+        createData.flags[MODULE_ID] ??= {};
+        createData.flags[MODULE_ID].isImage = true;
+      }
     }
   }
 });
@@ -206,7 +202,7 @@ function handleChatMessageRender(messageDoc, html) {
       el.style.removeProperty("display");
     }
 
-    // Formata imagens enviadas ou incorporadas
+    // Formata mídias enviadas ou incorporadas
     ImageHandler.formatDomMessage(messageDoc, el);
   } catch (err) {
     console.warn(`${MODULE_ID} | handleChatMessageRender erro:`, err);

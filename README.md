@@ -1,50 +1,40 @@
 # Chat Media & Image Viewer (Foundry VTT v13 e v12)
 
-Módulo moderno e leve para o **Foundry Virtual Tabletop (v13.351 / v12)** dedicado ao envio direto, incorporação e visualização de imagens e GIFs no chat, sem interferir na exibição de mensagens e rolagens nativas do Foundry VTT.
+Módulo moderno e leve para o **Foundry Virtual Tabletop (v13.351 / v12)** para compartilhar imagens, GIFs, vídeos, áudio e arquivos no chat, sem interferir na exibição de mensagens e rolagens nativas do Foundry VTT.
 
 ---
 
 ## 🚀 Principais Funcionalidades
 
-1. **Envio de Imagens do Computador:**
-   - Botão visível **`Imagem`** posicionado diretamente acima da caixa de mensagem do chat.
-   - Suporte para todos os formatos de imagem e animação comuns (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`, `.bmp`).
-   - Preservação total de GIFs animados (não sofrem recompressão em canvas, mantendo todas as frames).
-   - Otimização inteligente para imagens pesadas (> 250KB) com conversão rápida no cliente para WebP de alta fidelidade.
-   - Upload automático no servidor do Foundry (`[Data]/worlds/<seu-mundo>/chat-uploads/`) com fallback transparente para Base64 caso o usuário não tenha permissão de upload.
+1. **Anexar arquivos do computador**
+   - Use **Anexar**, cole um arquivo com **Ctrl+V** ou arraste-o sobre a caixa de mensagem.
+   - O upload usa a pasta `[Data]/worlds/<seu-mundo>/chat-uploads/` e depende do formato aceito pelo servidor e da permissão de upload do Foundry. Imagens ainda podem ser enviadas mesmo quando o upload falha ou o jogador não tem essa permissão.
+   - Arquivos animados são preservados. Imagens JPEG e BMP grandes podem ser otimizadas no cliente.
 
-2. **Envio por Link / URL de Mídia (GIF / URL):**
-   - Botão dedicado **`GIF / URL`** que abre um modal com campo de endereço e **Live Preview em tempo real**.
-   - Resolução inteligente de links de plataformas populares:
-     - **Tenor:** links diretos de GIFs com detecção e dicas.
-     - **Giphy:** converte links de páginas do Giphy (`giphy.com/gifs/...`) automaticamente para URLs diretas de GIF animado.
-     - **Imgur:** resolução direta de URLs sem extensão.
-     - **Discord CDN, Reddit e URLs diretas:** exibição imediata.
-   - Pressione **Enter** para enviar ou **Esc** para fechar o modal.
+2. **Prévia e envio por link**
+   - Abra **Mídia / URL** para ver a prévia de uma imagem, vídeo ou áudio antes de enviar. Também é possível colar links diretos na caixa de mensagem. O texto e os demais links da mensagem são preservados.
+   - GIFs do Discord entregues em MP4 ou WebM tocam automaticamente em loop e sem som quando o navegador permite. O leitor também oferece controles de reprodução.
+   - Links diretos do Tenor e do Giphy funcionam como mídia. Páginas do Giphy e links `.gifv` do Imgur são convertidos para mídia direta. No Tenor, use o endereço direto da imagem ou do vídeo para reproduzir no chat.
+   - Links assinados de anexos do Discord continuam sujeitos ao vencimento definido pelo Discord.
 
-3. **Incorporação Automática de Links no Chat (Auto-Embed):**
-   - Ao colar ou digitar uma URL de imagem ou GIF diretamente no campo de texto normal do chat, a mensagem é renderizada automaticamente como um card visual de mídia.
-   - Se a mensagem contiver texto acompanhado do link, o texto é preservado no cabeçalho e a imagem exibida logo abaixo.
+| Tipo | Exibição no chat |
+| --- | --- |
+| Imagens e animações, como PNG, JPEG, GIF, APNG, WebP, SVG e AVIF | Prévia clicável com visualizador de imagem |
+| Vídeo, como MP4, WebM, MOV e OGV | Leitor com controles |
+| Áudio, como MP3, OGG, WAV, M4A e FLAC | Leitor com controles |
+| PDF, ZIP, documentos e outros arquivos | Link para abrir ou baixar |
 
-4. **Colar da Área de Transferência (Ctrl + V):**
-   - Copie qualquer imagem da internet, do Discord ou capture um print de tela e pressione **Ctrl + V** com o chat aberto para enviá-la instantaneamente.
+A prévia depende do formato e do codec suportados pelo navegador. Quando a mídia não pode ser carregada, o card exibe o link do arquivo.
 
-5. **Arrastar e Soltar (Drag & Drop):**
-   - Arraste um arquivo de imagem do seu computador e solte sobre a caixa de texto do chat para enviar.
+### Visualizador de imagem (Lightbox)
 
-6. **Visualizador Moderno de Imagem (Lightbox Responsivo):**
-   - Clique em qualquer imagem ou GIF no histórico do chat para abri-la em visualização ampliada de alta qualidade.
-   - Fundo escurecido translúcido com desfoque (`backdrop-filter: blur(8px)`).
-   - Perfeitamente contido e centralizado no viewport (`max-width: 92vw; max-height: 92vh;`).
-   - Barra de ferramentas superior com:
-     - **Baixar:** faz download do arquivo da imagem diretamente no seu computador.
-     - **Abrir Original:** abre a imagem em resolução nativa em uma nova aba do navegador.
-     - **Fechar (X) / Esc:** feche rapidamente clicando no X, no fundo da tela ou pressionando a tecla `Escape`.
+- Clique em uma imagem ou GIF no chat para ampliar.
+- **Baixar** e **Abrir Original** dão acesso ao arquivo.
+- Feche com **Esc**, com o botão de fechar ou clicando no fundo.
 
-7. **Compatibilidade Total e Preservação do Chat Nativo:**
-   - 100% compatível com o Foundry VTT v13 (ApplicationV2) e v12.
-   - Nenhuma mensagem, rolagem de dado, sussurro ou card de sistema é ocultado ou alterado.
-   - Compatível com todos os módulos de rolagens 3D (ex: *Dice So Nice*) e sistemas (D&D 5e, Pathfinder 2e, Tormenta20, CoC, etc.).
+### Chat nativo
+
+O suporte a anexos usa os hooks de chat das versões 12 e 13 do Foundry. A incorporação automática ignora mensagens de rolagem e preserva cards com HTML próprio.
 
 ---
 
@@ -71,6 +61,6 @@ Módulo moderno e leve para o **Foundry Virtual Tabletop (v13.351 / v12)** dedic
 ## ⚙️ Configurações do Módulo
 
 No menu **Configurações do Jogo > Opções de Módulos > Chat Media & Image Viewer**:
-* **Incorporação Automática de Mídia:** ativa/desativa a conversão automática de links de imagens/GIFs digitados no chat em cards visuais.
+* **Incorporação Automática de Mídia:** ativa/desativa a conversão automática de links diretos de mídia ou arquivos em cards.
 * **Visualizador de Imagem (Lightbox):** ativa/desativa o visualizador ampliado em tela cheia ao clicar em imagens.
-* **Altura Máxima no Chat (px):** define a altura máxima (de 150px a 600px) dos cards de imagem no chat para evitar poluição visual.
+* **Altura Máxima no Chat (px):** define a altura máxima (de 150px a 600px) de imagens e vídeos no chat para evitar poluição visual.
